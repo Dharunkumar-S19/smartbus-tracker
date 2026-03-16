@@ -205,3 +205,21 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Node
+node_modules/
+dist/
+.expo/
+
+# Sensitive files
+.env
+firebase-credentials.json
+
+# System
+.DS_Store
+*.pem
+*.tsbuildinfo
+
+# Arduino
+*.ino.elf
+*.ino.bin
