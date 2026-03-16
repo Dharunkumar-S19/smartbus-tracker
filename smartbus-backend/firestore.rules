@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+    
+    function isValidLocation() {
+      return request.resource.data.lat is float &&
+             request.resource.data.lng is float;
+    }
+    
+    // buses collection
+    // Anyone can read bus info (even unauthenticated)
+    // Only backend service account can write
+    match /buses/{busId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    
+    // users collection
+    // Users can only read and write their own document
+    match /users/{userId} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow update: if isAuthenticated() && isOwner(userId);
+      allow delete: if false;
+    }
+    
+    // routes collection
+    // Anyone can read routes
+    match /routes/{routeId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    
+    // notifications collection
+    // Only authenticated users can read
+    // Only backend can write
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+  }
+}
