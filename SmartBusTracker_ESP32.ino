@@ -5,9 +5,9 @@
 #include <ArduinoJson.h>
 
 // Configuration
-const char* WIFI_SSID     = "Your_WiFi_Name";
-const char* WIFI_PASSWORD = "Your_WiFi_Password";
-const char* SERVER_URL    = "http://172.16.45.245:8000/api/location";
+const char* WIFI_SSID     = "vivo y200e";
+const char* WIFI_PASSWORD = "janani04";
+const char* SERVER_URL    = "https://smartbus-tracker-z7tn.onrender.com/api/location";
 const char* BUS_ID        = "BUS_001";
 const int   SEND_INTERVAL = 5000;
 const int   LED_PIN       = 2;
