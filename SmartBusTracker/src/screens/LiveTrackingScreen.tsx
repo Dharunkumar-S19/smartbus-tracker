@@ -166,34 +166,28 @@ export default function LiveTrackingScreen() {
                 if (mounted) setUserLocation(DEFAULT_COORD);
             }
 
-            // 2.5 Fetch Bus Route Details (including polyline) from DB
+            // 2.5 Fetch Bus Route Details (including polyline) from backend
+            const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://smartbus-tracker-z7tn.onrender.com';
+            const detailsUrl = `${apiUrl}/api/bus/${busId}/details`;
+            console.log(`Fetching bus details from: ${detailsUrl}`);
             try {
-                const response = await fetch(`http://10.0.2.2:8000/api/bus/${busId}/details`); // Using localhost/emulator proxy
-                if (!response.ok) {
-                    // Fallback to production if local fails
-                    throw new Error("Local backend failed");
-                }
-                const data = await response.json();
-                if (data && data.route_polyline) {
-                    // Map from [{"lat": 11, "lng": 77}, ...] to [[77, 11], ...]
-                    const formatted: [number, number][] = data.route_polyline.map((p: any) => [p.lng, p.lat]);
-                    setRoutePolyline(formatted);
-                    console.log(`Loaded ${formatted.length} road coordinates.`);
+                const response = await fetch(detailsUrl);
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Bus details received:', JSON.stringify(data).slice(0, 200));
+                    if (data && data.route_polyline && data.route_polyline.length > 0) {
+                        // Map from [{"lat": 11, "lng": 77}, ...] to [[lng, lat], ...]
+                        const formatted: [number, number][] = data.route_polyline.map((p: any) => [p.lng, p.lat]);
+                        setRoutePolyline(formatted);
+                        console.log(`Loaded ${formatted.length} road polyline points for ${busId}`);
+                    } else {
+                        console.warn('No route_polyline in bus details response');
+                    }
+                } else {
+                    console.warn(`Bus details fetch failed: HTTP ${response.status}`);
                 }
             } catch (error) {
-                console.log("Local backend not available. Trying production fallback...");
-                try {
-                    const response = await fetch(`https://smartbus-tracker-z7tn.onrender.com/api/bus/${busId}/details`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data && data.route_polyline) {
-                            const formatted: [number, number][] = data.route_polyline.map((p: any) => [p.lng, p.lat]);
-                            setRoutePolyline(formatted);
-                        }
-                    }
-                } catch (prodError) {
-                    console.error("All fetch attempts failed for bus details:", prodError);
-                }
+                console.error('Failed to fetch bus details:', error);
             }
 
             // 3. Firebase RTDB Subscription for Bus
