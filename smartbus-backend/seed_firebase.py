@@ -245,7 +245,7 @@ routes_to_seed = {
 
 def confirm_initialization():
     cert_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "./firebase-credentials.json")
-    database_url = os.getenv("FIREBASE_DATABASE_URL")
+    database_url = os.getenv("FIREBASE_DATABASE_URL") or os.getenv("EXPO_PUBLIC_FIREBASE_DATABASE_URL")
 
     if not database_url:
         print("❌ FIREBASE_DATABASE_URL not set!")

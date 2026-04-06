@@ -10,39 +10,43 @@ service cloud.firestore {
     function isOwner(uid) {
       return request.auth.uid == uid;
     }
-    
-    function isValidLocation() {
-      return request.resource.data.lat is float &&
-             request.resource.data.lng is float;
-    }
-    
+
     // buses collection
-    // Anyone can read bus info (even unauthenticated)
-    // Only backend service account can write
+    // Anyone can read bus info
     match /buses/{busId} {
       allow read: if true;
       allow write: if false;
     }
-    
-    // users collection
-    // Users can only read and write their own document
-    match /users/{userId} {
-      allow read: if isAuthenticated() && isOwner(userId);
-      allow create: if isAuthenticated() && isOwner(userId);
-      allow update: if isAuthenticated() && isOwner(userId);
-      allow delete: if false;
-    }
-    
+
     // routes collection
     // Anyone can read routes
     match /routes/{routeId} {
       allow read: if true;
       allow write: if false;
     }
+
+    // drivers collection
+    // Drivers can only read and write their own document
+    match /drivers/{driverId} {
+      allow read: if isAuthenticated() && isOwner(driverId);
+      allow write: if isAuthenticated() && isOwner(driverId);
+    }
+
+    // passengers collection
+    // Passengers can only read and write their own document
+    match /passengers/{passengerId} {
+      allow read: if isAuthenticated() && isOwner(passengerId);
+      allow write: if isAuthenticated() && isOwner(passengerId);
+    }
+
+    // users collection (legacy or general)
+    match /users/{userId} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow write: if isAuthenticated() && isOwner(userId);
+    }
     
     // notifications collection
     // Only authenticated users can read
-    // Only backend can write
     match /notifications/{notifId} {
       allow read: if isAuthenticated();
       allow write: if false;

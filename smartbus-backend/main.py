@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import location, buses, routes
+from app.routers import location, buses, routes, admin
 from app.config import settings
 from app.services.firebase_service import initialize_firebase
 
@@ -24,6 +24,7 @@ app.add_middleware(
 app.include_router(location.router, prefix="/api", tags=["location"])
 app.include_router(buses.router, prefix="/api", tags=["buses"])
 app.include_router(routes.router, prefix="/api", tags=["routes"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 @app.get("/")
 async def root():

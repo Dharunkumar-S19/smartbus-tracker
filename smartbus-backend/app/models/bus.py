@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List, Any
 
 class BusInfo(BaseModel):
     bus_id: str
@@ -15,3 +15,5 @@ class BusInfo(BaseModel):
     last_lat: Optional[float] = None
     last_lng: Optional[float] = None
     last_updated: Optional[str] = None
+    route_polyline: Optional[List[List[float]]] = None # Array of [lng, lat] for frontend compatibility
+    stops: Optional[List[Any]] = None

@@ -1,18 +1,59 @@
-rules_version='2'
-
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      // This rule allows anyone with your database reference to view, edit,
-      // and delete all data in your database. It is useful for getting
-      // started, but it is configured to expire after 30 days because it
-      // leaves your app open to attackers. At that time, all client
-      // requests to your database will be denied.
-      //
-      // Make sure to write security rules for your app before that time, or
-      // else all client requests to your database will be denied until you
-      // update your rules.
-      allow read, write: if request.time < timestamp.date(2026, 4, 4);
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
+    // buses collection
+    // Anyone can read bus info
+    // Drivers can only update their assigned bus
+    match /buses/{busId} {
+      allow read: if true;
+      allow update: if isAuthenticated() && (
+        get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.assignedBusId == busId
+      );
+      allow write: if false;
+    }
+
+    // routes collection
+    // Anyone can read routes
+    match /routes/{routeId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // drivers collection
+    // Drivers can only read and write their own document
+    match /drivers/{driverId} {
+      allow read: if isAuthenticated() && isOwner(driverId);
+      allow write: if isAuthenticated() && isOwner(driverId);
+    }
+
+    // passengers collection
+    // Passengers can only read and write their own document
+    match /passengers/{passengerId} {
+      allow read: if isAuthenticated() && isOwner(passengerId);
+      allow write: if isAuthenticated() && isOwner(passengerId);
+    }
+
+    // users collection (legacy or general)
+    match /users/{userId} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow write: if isAuthenticated() && isOwner(userId);
+    }
+    
+    // notifications collection
+    // Only authenticated users can read
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
     }
   }
 }

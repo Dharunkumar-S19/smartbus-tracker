@@ -45,7 +45,7 @@ export default function RegisterScreen() {
         setLoading(true);
         setError('');
 
-        const { error: registerError } = await registerWithEmail(email, name, password);
+        const { error: registerError } = await registerWithEmail(email, name, password, 'passenger');
 
         setLoading(false);
 
@@ -182,5 +182,37 @@ const styles = StyleSheet.create({
         color: '#FF3B30',
         marginBottom: 16,
         textAlign: 'center',
+    },
+    roleContainer: {
+        marginBottom: 20,
+    },
+    roleLabel: {
+        fontSize: 16,
+        color: '#333',
+        marginBottom: 8,
+        fontWeight: '500',
+    },
+    roleButtons: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    roleButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#007AFF',
+        alignItems: 'center',
+    },
+    roleButtonActive: {
+        backgroundColor: '#007AFF',
+    },
+    roleButtonText: {
+        color: '#007AFF',
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    roleButtonTextActive: {
+        color: '#fff',
     }
 });

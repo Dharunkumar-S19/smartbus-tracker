@@ -1,99 +1,72 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
+import { GoogleMap, useJsApiLoader, MarkerF, PolylineF } from '@react-google-maps/api';
 
 interface MapViewWebProps {
     latitude: number;
     longitude: number;
+    routeCoordinates?: [number, number][]; // Array of [longitude, latitude]
 }
 
-export default function MapViewWeb({ latitude, longitude }: MapViewWebProps) {
-    const mapContainer = useRef<HTMLDivElement>(null);
-    const map = useRef<maplibregl.Map | null>(null);
-    const marker = useRef<maplibregl.Marker | null>(null);
+const containerStyle = {
+    width: '100%',
+    height: '100%'
+};
 
-    useEffect(() => {
-        if (!mapContainer.current) return;
+export default function MapViewWeb({ latitude, longitude, routeCoordinates }: MapViewWebProps) {
+    const { isLoaded } = useJsApiLoader({
+        id: 'google-map-script',
+        googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || ''
+    });
 
-        if (!map.current) {
-            // Initialize map on first load
-            map.current = new maplibregl.Map({
-                container: mapContainer.current,
-                style: {
-                    version: 8,
-                    sources: {
-                        osm: {
-                            type: 'raster',
-                            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-                            tileSize: 256,
-                            attribution: '&copy; OpenStreetMap Contributors',
-                        },
-                    },
-                    layers: [
-                        {
-                            id: 'osm',
-                            type: 'raster',
-                            source: 'osm',
-                            minzoom: 0,
-                            maxzoom: 19,
-                        },
-                    ],
-                },
-                center: [longitude, latitude],
-                zoom: 14,
-            });
+    const center = useMemo(() => ({
+        lat: latitude,
+        lng: longitude
+    }), [latitude, longitude]);
 
-            // Create a custom DOM element for the marker to match mobile style
-            const el = document.createElement('div');
-            el.style.width = '24px';
-            el.style.height = '24px';
-            el.style.borderRadius = '50%';
-            el.style.backgroundColor = 'rgba(37, 99, 235, 0.3)';
-            el.style.border = '2px solid #ffffff';
-            el.style.display = 'flex';
-            el.style.alignItems = 'center';
-            el.style.justifyContent = 'center';
+    const path = useMemo(() => {
+        return routeCoordinates?.map(coord => ({
+            lat: coord[1],
+            lng: coord[0]
+        })) || [];
+    }, [routeCoordinates]);
 
-            const innerEl = document.createElement('div');
-            innerEl.style.width = '12px';
-            innerEl.style.height = '12px';
-            innerEl.style.borderRadius = '50%';
-            innerEl.style.backgroundColor = '#2563EB';
-
-            el.appendChild(innerEl);
-
-            // Add marker to map
-            marker.current = new maplibregl.Marker({ element: el })
-                .setLngLat([longitude, latitude])
-                .addTo(map.current);
-        } else {
-            // Update map center and marker position when props change
-            map.current.flyTo({
-                center: [longitude, latitude],
-                zoom: 14,
-                speed: 1.5,
-            });
-
-            if (marker.current) {
-                marker.current.setLngLat([longitude, latitude]);
-            }
-        }
-
-        return () => {
-            // Cleanup map on unmount
-            if (map.current) {
-                // We generally don't destroy it to avoid re-render flashing if possible,
-                // but it's good practice
-                // map.current.remove(); 
-            }
-        };
-    }, [latitude, longitude]);
+    if (!isLoaded) return <View style={styles.container} />;
 
     return (
         <View style={styles.container}>
-            {/* @ts-ignore - Rendering a div using React Native Web allows ref attachment */}
-            <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
+            <GoogleMap
+                mapContainerStyle={containerStyle}
+                center={center}
+                zoom={14}
+                options={{
+                    disableDefaultUI: true,
+                    zoomControl: false,
+                }}
+            >
+                {path.length > 0 && (
+                    <PolylineF
+                        path={path}
+                        options={{
+                            strokeColor: "#2563EB",
+                            strokeOpacity: 0.8,
+                            strokeWeight: 4,
+                        }}
+                    />
+                )}
+                
+                <MarkerF
+                    position={center}
+                    icon={isLoaded && window.google ? {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        fillColor: '#2563EB',
+                        fillOpacity: 1,
+                        strokeColor: '#ffffff',
+                        strokeWeight: 2,
+                        scale: 6,
+                    } : undefined}
+                />
+            </GoogleMap>
         </View>
     );
 }

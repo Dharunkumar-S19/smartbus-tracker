@@ -2,10 +2,12 @@ import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     signOut,
-    updateProfile
+    updateProfile,
+    User
 } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from './config';
+import { UserProfile } from '../types';
 
 export const loginWithEmail = async (email: string, password: string) => {
     try {
@@ -16,7 +18,7 @@ export const loginWithEmail = async (email: string, password: string) => {
     }
 };
 
-export const registerWithEmail = async (email: string, name: string, password: string) => {
+export const registerWithEmail = async (email: string, name: string, password: string, role: 'passenger' | 'driver' = 'passenger') => {
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
@@ -25,15 +27,42 @@ export const registerWithEmail = async (email: string, name: string, password: s
         await updateProfile(user, { displayName: name });
 
         // Save profile to Firestore
-        await setDoc(doc(db, 'users', user.uid), {
+        const collectionName = role === 'driver' ? 'drivers' : 'passengers';
+        await setDoc(doc(db, collectionName, user.uid), {
             uid: user.uid,
             name,
-            email
+            email,
+            role
         });
 
         return { user, error: null };
     } catch (error: any) {
         return { user: null, error: error.message || 'Registration failed' };
+    }
+};
+
+export const getUserProfile = async (uid: string, role?: 'passenger' | 'driver'): Promise<{ profile: UserProfile | null, error: string | null }> => {
+    try {
+        if (role) {
+            const collectionName = role === 'driver' ? 'drivers' : 'passengers';
+            const userDoc = await getDoc(doc(db, collectionName, uid));
+            if (userDoc.exists()) {
+                return { profile: userDoc.data() as UserProfile, error: null };
+            }
+        } else {
+            // Try both collections if role is unknown
+            const driverDoc = await getDoc(doc(db, 'drivers', uid));
+            if (driverDoc.exists()) {
+                return { profile: driverDoc.data() as UserProfile, error: null };
+            }
+            const passengerDoc = await getDoc(doc(db, 'passengers', uid));
+            if (passengerDoc.exists()) {
+                return { profile: passengerDoc.data() as UserProfile, error: null };
+            }
+        }
+        return { profile: null, error: 'User profile not found' };
+    } catch (error: any) {
+        return { profile: null, error: error.message || 'Error fetching profile' };
     }
 };
 

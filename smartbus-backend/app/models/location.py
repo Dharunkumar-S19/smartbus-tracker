@@ -20,6 +20,7 @@ class SmoothedLocation(BaseModel):
     timestamp: str
     next_stop: Optional[str] = None
     eta_minutes: Optional[float] = None
+    total_eta_minutes: Optional[float] = None
     distance_remaining: Optional[float] = None
     route_progress: Optional[float] = None
     passenger_count: Optional[int] = None

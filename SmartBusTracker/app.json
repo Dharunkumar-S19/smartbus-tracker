@@ -12,22 +12,30 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "AIzaSyBf-t-CAOaefmxpoLSwZoV1JotdNWWlAJU"
+      }
     },
     "android": {
+      "package": "com.dharunkumar.smartbustracker",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBf-t-CAOaefmxpoLSwZoV1JotdNWWlAJU"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@maplibre/maplibre-react-native",
       "@react-native-community/datetimepicker"
     ]
   }

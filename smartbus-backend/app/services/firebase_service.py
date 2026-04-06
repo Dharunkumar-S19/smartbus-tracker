@@ -3,6 +3,7 @@ from firebase_admin import credentials, db, firestore
 import logging
 import os
 import json
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -101,11 +102,70 @@ async def get_bus_route(bus_id: str):
         ).get()
         if doc.exists:
             data = doc.to_dict()
+            # Return both stops and polyline as a dict if possible, 
+            # but for backward compatibility with eta_service, 
+            # we should check how it's used.
+            # Actually, eta_service expects a list. 
+            # Let's keep this returning stops and add get_bus_details.
             return data.get('stops', [])
         return []
     except Exception as e:
         print(f"Error getting route: {e}")
         return []
+
+async def get_bus_details(bus_id: str):
+    try:
+        if not firebase_admin._apps:
+            initialize_firebase()
+        fs = firestore.client()
+        doc = fs.collection('buses').document(bus_id).get()
+        if doc.exists:
+            return doc.to_dict()
+        return None
+    except Exception as e:
+        print(f"Error getting bus details: {e}")
+        return None
+
+async def record_trip_coordinate(bus_id: str, lat: float, lng: float):
+    try:
+        if not firebase_admin._apps:
+            initialize_firebase()
+        fs = firestore.client()
+        # Store in a temporary collection for the first trip
+        trip_ref = fs.collection('trips').document(f"{bus_id}_first_trip")
+        
+        # Use arrayUnion to append coordinates
+        trip_ref.set({
+            'coordinates': firestore.ArrayUnion([{
+                'latitude': lat,
+                'longitude': lng,
+                'timestamp': datetime.utcnow().isoformat()
+            }])
+        }, merge=True)
+    except Exception as e:
+        print(f"Error recording trip: {e}")
+
+async def finalize_route_from_trip(bus_id: str):
+    try:
+        if not firebase_admin._apps:
+            initialize_firebase()
+        fs = firestore.client()
+        trip_doc = fs.collection('trips').document(f"{bus_id}_first_trip").get()
+        
+        if trip_doc.exists:
+            coords = trip_doc.to_dict().get('coordinates', [])
+            # Convert to a simple list of [longitude, latitude] to match MapLibre/GeoJSON
+            polyline = [[c['longitude'], c['latitude']] for c in coords]
+            
+            # Save to bus document
+            fs.collection('buses').document(bus_id).update({
+                'route_polyline': polyline
+            })
+            return True
+        return False
+    except Exception as e:
+        print(f"Error finalizing route: {e}")
+        return False
 
 async def get_all_buses(
     from_location: str = None,

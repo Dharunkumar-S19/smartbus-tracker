@@ -77,3 +77,14 @@ async def get_route(bus_id: str):
     if not stops:
         raise HTTPException(status_code=404, detail="Route not found")
     return stops
+
+@router.get("/bus/{bus_id}/details", response_model=BusInfo)
+async def get_bus_details(bus_id: str):
+    bus = await get_bus(bus_id)
+    
+    # Get stops for the bus
+    stops = await get_bus_route(bus_id)
+    if stops:
+        bus.stops = stops
+        
+    return bus

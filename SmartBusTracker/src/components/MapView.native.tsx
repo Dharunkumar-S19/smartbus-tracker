@@ -1,64 +1,55 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
-
-// Set access token if needed, or null if using purely open OSM tiles without Mapbox/MapTiler keys
-MapLibreGL.setAccessToken(null);
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 
 interface MapViewMobileProps {
     latitude: number;
     longitude: number;
+    routeCoordinates?: [number, number][]; // Array of [longitude, latitude]
 }
 
-const OSM_STYLE = {
-    version: 8,
-    sources: {
-        osm: {
-            type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            attribution: '&copy; OpenStreetMap Contributors',
-        },
-    },
-    layers: [
-        {
-            id: 'osm',
-            type: 'raster',
-            source: 'osm',
-            minzoom: 0,
-            maxzoom: 19,
-        },
-    ],
-};
-
-export default function MapViewMobile({ latitude, longitude }: MapViewMobileProps) {
-    useEffect(() => {
-        // Optionally setup any MapLibre configuration on mount
-    }, []);
+export default function MapViewMobile({ latitude, longitude, routeCoordinates }: MapViewMobileProps) {
+    // Convert [long, lat] to {latitude: lat, longitude: long} for Polyline
+    const formattedRoute = routeCoordinates?.map(coord => ({
+        latitude: coord[1],
+        longitude: coord[0]
+    })) || [];
 
     return (
         <View style={styles.container}>
-            <MapLibreGL.MapView
+            <MapView
+                provider={PROVIDER_GOOGLE}
                 style={styles.map}
-                mapStyle={JSON.stringify(OSM_STYLE)}
-                logoEnabled={false}
+                initialRegion={{
+                    latitude,
+                    longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                }}
+                region={{
+                    latitude,
+                    longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                }}
             >
-                <MapLibreGL.Camera
-                    zoomLevel={14}
-                    centerCoordinate={[longitude, latitude]}
-                    animationMode="flyTo"
-                    animationDuration={1000}
-                />
+                {formattedRoute.length > 0 && (
+                    <Polyline
+                        coordinates={formattedRoute}
+                        strokeColor="#2563EB"
+                        strokeWidth={4}
+                    />
+                )}
 
-                <MapLibreGL.PointAnnotation
-                    id="user-location"
-                    coordinate={[longitude, latitude]}
+                <Marker
+                    coordinate={{ latitude, longitude }}
+                    anchor={{ x: 0.5, y: 0.5 }}
                 >
                     <View style={styles.markerContainer}>
                         <View style={styles.markerInner} />
                     </View>
-                </MapLibreGL.PointAnnotation>
-            </MapLibreGL.MapView>
+                </Marker>
+            </MapView>
         </View >
     );
 }

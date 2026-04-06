@@ -9,19 +9,16 @@ import {
     KeyboardAvoidingView,
     Platform
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types';
 import { loginWithEmail, getUserProfile, getCurrentUser } from '../firebase/auth';
 
-type LoginRouteProp = RouteProp<RootStackParamList, 'Login'>;
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'DriverLogin'>;
 
-export default function LoginScreen() {
+export default function DriverLoginScreen() {
     const navigation = useNavigation<NavigationProp>();
-    const route = useRoute<LoginRouteProp>();
-    const isDriverMode = route.params?.isDriver || false;
-
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -45,13 +42,14 @@ export default function LoginScreen() {
             // Get user profile to determine role
             const user = getCurrentUser();
             if (user) {
-                const { profile, error: profileError } = await getUserProfile(user.uid, isDriverMode ? 'driver' : 'passenger');
+                const { profile, error: profileError } = await getUserProfile(user.uid, 'driver');
                 setLoading(false);
                 if (profileError) {
                     setError(profileError);
                 } else if (profile?.role === 'driver') {
                     navigation.replace('DriverDashboard');
                 } else {
+                    // If a passenger tries to login through driver portal, redirect appropriately
                     navigation.replace('Home');
                 }
             } else {
@@ -65,17 +63,27 @@ export default function LoginScreen() {
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.container}
         >
+            <TouchableOpacity 
+                style={styles.backButton}
+                onPress={() => navigation.navigate('Login')}
+            >
+                <Ionicons name="chevron-back" size={24} color="#007AFF" />
+                <Text style={styles.backText}>Back</Text>
+            </TouchableOpacity>
+
             <View style={styles.formContainer}>
-                <Text style={styles.title}>{isDriverMode ? 'Driver Portal' : 'Welcome Back'}</Text>
-                <Text style={styles.subtitle}>
-                    {isDriverMode ? 'Log in to start your trip' : 'Login to SmartBusTracker'}
-                </Text>
+                <View style={styles.iconContainer}>
+                    <Ionicons name="bus" size={60} color="#007AFF" />
+                </View>
+                
+                <Text style={styles.title}>Driver Portal</Text>
+                <Text style={styles.subtitle}>Enter your transport credentials to begin</Text>
 
                 {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
                 <TextInput
                     style={styles.input}
-                    placeholder="Email"
+                    placeholder="Mail ID"
                     value={email}
                     onChangeText={setEmail}
                     autoCapitalize="none"
@@ -98,36 +106,13 @@ export default function LoginScreen() {
                     {loading ? (
                         <ActivityIndicator color="#fff" />
                     ) : (
-                        <Text style={styles.buttonText}>Login</Text>
+                        <Text style={styles.buttonText}>Authenticate & Start Trip</Text>
                     )}
                 </TouchableOpacity>
 
-                {!isDriverMode && (
-                    <View style={styles.footerLinks}>
-                        <TouchableOpacity
-                            style={styles.linkContainer}
-                            onPress={() => navigation.navigate('Register')}
-                        >
-                            <Text style={styles.linkText}>Don't have an account? Register</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[styles.linkContainer, { marginTop: 16 }]}
-                            onPress={() => navigation.navigate('DriverLogin')}
-                        >
-                            <Text style={styles.driverLinkText}>Login as Driver</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-
-                {isDriverMode && (
-                    <TouchableOpacity
-                        style={styles.linkContainer}
-                        onPress={() => navigation.replace('Login', { isDriver: false })}
-                    >
-                        <Text style={styles.linkText}>Are you a passenger? Login here</Text>
-                    </TouchableOpacity>
-                )}
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>Need access? Contact your Admin</Text>
+                </View>
             </View>
         </KeyboardAvoidingView>
     );
@@ -136,64 +121,86 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#ffffff',
+        backgroundColor: '#f8fbfc',
+    },
+    backButton: {
+        position: 'absolute',
+        top: Platform.OS === 'ios' ? 60 : 40,
+        left: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    backText: {
+        color: '#007AFF',
+        fontSize: 16,
+        marginLeft: 4,
     },
     formContainer: {
         flex: 1,
         justifyContent: 'center',
         paddingHorizontal: 24,
     },
+    iconContainer: {
+        alignItems: 'center',
+        marginBottom: 20,
+    },
     title: {
-        fontSize: 28,
+        fontSize: 32,
         fontWeight: 'bold',
-        color: '#333',
+        color: '#1a1a1a',
+        textAlign: 'center',
         marginBottom: 8,
     },
     subtitle: {
         fontSize: 16,
         color: '#666',
-        marginBottom: 32,
+        textAlign: 'center',
+        marginBottom: 40,
     },
     input: {
-        backgroundColor: '#f5f5f5',
-        borderRadius: 8,
+        backgroundColor: '#fff',
+        borderRadius: 12,
         padding: 16,
         marginBottom: 16,
         fontSize: 16,
+        borderWidth: 1,
+        borderColor: '#e1e8ed',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     button: {
         backgroundColor: '#007AFF',
-        borderRadius: 8,
-        padding: 16,
+        borderRadius: 12,
+        padding: 18,
         alignItems: 'center',
-        marginTop: 8,
-        height: 54,
-        justifyContent: 'center',
+        marginTop: 12,
+        shadowColor: '#007AFF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
     buttonText: {
         color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    footerLinks: {
-        marginTop: 24,
-        alignItems: 'center',
-    },
-    linkContainer: {
-        alignItems: 'center',
-    },
-    linkText: {
-        color: '#007AFF',
-        fontSize: 14,
-    },
-    driverLinkText: {
-        color: '#8e8e93',
-        fontSize: 13,
-        textDecorationLine: 'underline',
+        fontSize: 17,
+        fontWeight: 'bold',
     },
     errorText: {
         color: '#FF3B30',
-        marginBottom: 16,
+        marginBottom: 20,
         textAlign: 'center',
-    }
+        fontWeight: '500',
+    },
+    footer: {
+        marginTop: 40,
+        alignItems: 'center',
+    },
+    footerText: {
+        color: '#8e8e93',
+        fontSize: 14,
+    },
 });

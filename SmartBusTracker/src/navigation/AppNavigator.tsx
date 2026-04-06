@@ -8,6 +8,8 @@ import LiveTrackingScreen from '../screens/LiveTrackingScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import DriverLoginScreen from '../screens/DriverLoginScreen';
+import DriverDashboard from '../screens/DriverDashboard';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -29,20 +31,18 @@ export default function AppNavigator() {
                 component={LiveTrackingScreen}
                 options={{ title: 'Live Tracking' }}
             />
-            <Stack.Screen
-                name="Login"
-                component={LoginScreen}
-                options={{ title: 'Login' }}
-            />
-            <Stack.Screen
-                name="Register"
-                component={RegisterScreen}
-                options={{ title: 'Register' }}
-            />
+            <Stack.Screen name="Login" component={LoginScreen} options={{ title: 'Login' }} />
+            <Stack.Screen name="DriverLogin" component={DriverLoginScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Create Account' }} />
             <Stack.Screen
                 name="Profile"
                 component={ProfileScreen}
                 options={{ title: 'My Profile' }}
+            />
+            <Stack.Screen
+                name="DriverDashboard"
+                component={DriverDashboard}
+                options={{ headerShown: false }}
             />
         </Stack.Navigator>
     );

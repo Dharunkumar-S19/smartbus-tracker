@@ -12,6 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types';
 import { AuthButton } from '../components/AuthButton';
 
@@ -37,26 +38,54 @@ export default function HomeScreen() {
 
     // Autocomplete states
     const [showSuggestions, setShowSuggestions] = useState<'from' | 'to' | null>(null);
+    const [suggestions, setSuggestions] = useState<any[]>([]);
+    const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
-    const KNOWN_LOCATIONS = [
-        "Kattampatti",
-        "Gandhipuram",
-        "Peelamedu",
-        "Hopes College",
-        "Vellalore",
-        "RS Puram",
-        "Avinashi Road",
-        "Coimbatore"
-    ];
+    const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
-    const getFilteredLocations = (query: string) => {
-        if (!query) return KNOWN_LOCATIONS;
-        return KNOWN_LOCATIONS.filter(loc =>
-            loc.toLowerCase().includes(query.toLowerCase())
-        );
+    const fetchSuggestions = async (query: string) => {
+        if (!query || query.length < 3) {
+            setSuggestions([]);
+            return;
+        }
+
+        setLoadingSuggestions(true);
+        try {
+            const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${GOOGLE_MAPS_API_KEY}&types=geocode`;
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.status === 'OK') {
+                setSuggestions(data.predictions);
+            } else {
+                console.warn('Google Places API error:', data.status);
+                setSuggestions([]);
+            }
+        } catch (error) {
+            console.error('Error fetching suggestions:', error);
+            setSuggestions([]);
+        } finally {
+            setLoadingSuggestions(false);
+        }
     };
 
     useEffect(() => {
+        const query = showSuggestions === 'from' ? from : to;
+        const delayDebounceFn = setTimeout(() => {
+            if (query) {
+                fetchSuggestions(query);
+            } else {
+                setSuggestions([]);
+            }
+        }, 300);
+
+        return () => clearTimeout(delayDebounceFn);
+    }, [from, to, showSuggestions]);
+
+    useEffect(() => {
+        let subscription: Location.LocationSubscription | null = null;
+        let mounted = true;
+
         (async () => {
             try {
                 let { status } = await Location.requestForegroundPermissionsAsync();
@@ -67,18 +96,48 @@ export default function HomeScreen() {
                     return;
                 }
 
-                let loc = await Location.getCurrentPositionAsync({});
-                setLocation({
-                    latitude: loc.coords.latitude,
-                    longitude: loc.coords.longitude,
+                // Initial position
+                let initialLoc = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.BestForNavigation,
                 });
+                
+                if (mounted) {
+                    setLocation({
+                        latitude: initialLoc.coords.latitude,
+                        longitude: initialLoc.coords.longitude,
+                    });
+                    setLoadingLocation(false);
+                }
+
+                // Watch position for live updates
+                subscription = await Location.watchPositionAsync(
+                    {
+                        accuracy: Location.Accuracy.BestForNavigation,
+                        timeInterval: 2000,
+                        distanceInterval: 1,
+                    },
+                    (newLoc) => {
+                        if (mounted) {
+                            setLocation({
+                                latitude: newLoc.coords.latitude,
+                                longitude: newLoc.coords.longitude,
+                            });
+                        }
+                    }
+                );
             } catch (error) {
                 console.warn("Could not fetch location", error);
-                setLocation(DEFAULT_COORD);
-            } finally {
+                if (!location) setLocation(DEFAULT_COORD);
                 setLoadingLocation(false);
             }
         })();
+
+        return () => {
+            mounted = false;
+            if (subscription) {
+                subscription.remove();
+            }
+        };
     }, []);
 
     const handleSwap = () => {
@@ -118,13 +177,15 @@ export default function HomeScreen() {
         });
     };
 
-    const handleSelectSuggestion = (locationName: string) => {
+    const handleSelectSuggestion = (prediction: any) => {
+        const locationName = prediction.description.split(',')[0];
         if (showSuggestions === 'from') {
             setFrom(locationName);
         } else if (showSuggestions === 'to') {
             setTo(locationName);
         }
         setShowSuggestions(null); // Hide suggestions after selection
+        setSuggestions([]);
     };
 
     return (
@@ -165,15 +226,15 @@ export default function HomeScreen() {
                     </View>
 
                     {/* Render AutoComplete for "From" directly below the input */}
-                    {showSuggestions === 'from' && (
+                    {showSuggestions === 'from' && suggestions.length > 0 && (
                         <View style={styles.suggestionsContainer}>
-                            {getFilteredLocations(from).map((loc, idx) => (
+                            {suggestions.map((loc, idx) => (
                                 <TouchableOpacity
                                     key={`from-${idx}`}
                                     style={styles.suggestionItem}
                                     onPress={() => handleSelectSuggestion(loc)}
                                 >
-                                    <Text style={styles.suggestionText}>{loc}</Text>
+                                    <Text style={styles.suggestionText}>{loc.description}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -195,15 +256,15 @@ export default function HomeScreen() {
                     </View>
 
                     {/* Render AutoComplete for "To" directly below the input */}
-                    {showSuggestions === 'to' && (
+                    {showSuggestions === 'to' && suggestions.length > 0 && (
                         <View style={styles.suggestionsContainer}>
-                            {getFilteredLocations(to).map((loc, idx) => (
+                            {suggestions.map((loc, idx) => (
                                 <TouchableOpacity
                                     key={`to-${idx}`}
                                     style={styles.suggestionItem}
                                     onPress={() => handleSelectSuggestion(loc)}
                                 >
-                                    <Text style={styles.suggestionText}>{loc}</Text>
+                                    <Text style={styles.suggestionText}>{loc.description}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>

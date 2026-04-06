@@ -2,6 +2,8 @@ export interface UserProfile {
   uid: string;
   name: string;
   email: string;
+  role: 'passenger' | 'driver';
+  assignedBusId?: string;
 }
 
 export type BusStatus = "on_time" | "delayed" | "arriving";
@@ -34,6 +36,7 @@ export interface GpsData {
   speed: number;
   nextStop?: StopInfo;
   etaMinutes?: number;
+  totalEtaMinutes?: number;
   distanceRemaining?: number;
   routeProgress?: number;
   currentPassengers?: number;
@@ -44,7 +47,9 @@ export type RootStackParamList = {
   Home: undefined;
   BusList: { from: string; to: string; date: string };
   LiveTracking: { busId: string; busName: string; from: string; to: string };
-  Login: undefined;
+  Login: { isDriver?: boolean } | undefined;
+  DriverLogin: undefined;
   Register: undefined;
   Profile: undefined;
+  DriverDashboard: undefined;
 };

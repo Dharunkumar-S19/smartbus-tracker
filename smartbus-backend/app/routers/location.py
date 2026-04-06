@@ -4,10 +4,21 @@ from app.models.location import LocationUpdate, SmoothedLocation
 from app.services.kalman_filter import get_kalman_filter
 from app.services.eta_service import calculate_next_stop, check_bus_status
 from app.services.notification_service import check_and_notify
-from app.services.firebase_service import update_live_location, update_bus_status, get_firestore_client
+from app.services.firebase_service import (
+    update_live_location, 
+    update_bus_status, 
+    get_firestore_client,
+    get_bus_details,
+    record_trip_coordinate
+)
 from app.utils.websocket_manager import manager
 
 router = APIRouter()
+
+@router.get("/bus/{bus_id}/details")
+async def get_details(bus_id: str):
+    details = await get_bus_details(bus_id)
+    return details
 
 @router.post("/location", response_model=SmoothedLocation)
 async def publish_location(location: LocationUpdate):
@@ -38,6 +49,7 @@ async def publish_location(location: LocationUpdate):
         timestamp=location.timestamp or datetime.utcnow().isoformat(),
         next_stop=next_stop_name,
         eta_minutes=eta_minutes,
+        total_eta_minutes=journey_data.get("total_eta_minutes"),
         distance_remaining=journey_data.get("distance_remaining"),
         route_progress=journey_data.get("route_progress"),
         passenger_count=location.passenger_count,
@@ -46,6 +58,14 @@ async def publish_location(location: LocationUpdate):
     )
 
     await update_live_location(location.bus_id, smoothed.model_dump())
+
+    # Record first trip if no route_polyline exists
+    try:
+        bus_details = await get_bus_details(location.bus_id)
+        if bus_details and not bus_details.get('route_polyline'):
+            await record_trip_coordinate(location.bus_id, smooth_lat, smooth_lng)
+    except Exception as e:
+        print(f"Error checking/recording trip: {e}")
 
     if delay_minutes > 0:
         await update_bus_status(location.bus_id, status, delay_minutes)

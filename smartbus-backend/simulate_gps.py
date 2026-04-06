@@ -37,14 +37,34 @@ def add_gps_noise(lat, lng, noise=0.0001):
 
 def simulate_bus(bus_id: str, base_speed: float, start_index: int = 0):
   print(f"\n🚌 Starting single bus standalone simulation for {bus_id}")
-  print(f"📍 Route: Tiruchengode → Salem")
   print(f"🌐 Server: {SERVER_URL}\n")
   
+  # Fetch actual road route from backend
+  try:
+    print(f"⏳ Fetching road coordinates for {bus_id} from backend...")
+    details_res = requests.get(f"http://localhost:8000/api/bus/{bus_id}/details")
+    if details_res.status_code == 200:
+        details = details_res.json()
+        raw_polyline = details.get('route_polyline', [])
+        if raw_polyline:
+            # Map from [{"lat": x, "lng": y}] back to list of dicts for simulation
+            route_coords = raw_polyline
+            print(f"✅ Loaded {len(route_coords)} road coordinates for simulation.")
+        else:
+            print("⚠️ No road polyline found. Using fallback stops.")
+            route_coords = [{"lat": s['lat'], "lng": s['lng']} for s in details.get('stops', [])]
+    else:
+        print(f"❌ Failed to fetch bus details: {details_res.status_code}")
+        return
+  except Exception as e:
+    print(f"❌ Error fetching route: {e}")
+    return
+
   current_index = start_index
   passenger_count = random.randint(10, 30)
   
   while True:
-    coord = ROUTE_COORDINATES[current_index]
+    coord = route_coords[current_index]
     
     # Add realistic GPS noise
     noisy_lat, noisy_lng = add_gps_noise(
@@ -73,7 +93,7 @@ def simulate_bus(bus_id: str, base_speed: float, start_index: int = 0):
     }
     
     # Print status
-    print(f"🚌 {bus_id} → Stop {current_index + 1}/{len(ROUTE_COORDINATES)}")
+    print(f"🚌 {bus_id} → Point {current_index + 1}/{len(route_coords)}")
     print(f"📍 Lat: {payload['lat']} Lng: {payload['lng']}")
     print(f"⚡ Speed: {payload['speed']} km/h 👥 Passengers: {passenger_count}")
     
@@ -86,20 +106,17 @@ def simulate_bus(bus_id: str, base_speed: float, start_index: int = 0):
       )
       if response.status_code == 200:
         data = response.json()
-        print(f"✅ Server OK | Smoothed: "
-              f"{data.get('smoothed_lat', 'N/A'):.6f}, "
-              f"{data.get('smoothed_lng', 'N/A'):.6f}")
+        print(f"✅ Server Status: {data.get('status', 'OK')} | ETA: {data.get('eta_minutes', 'N/A')} min | Total: {data.get('total_eta_minutes', 'N/A')} min")
       else:
         print(f"❌ Server error: {response.status_code}")
     except requests.exceptions.ConnectionError:
       print("❌ Cannot connect to server!")
-      print("   Make sure FastAPI is running:")
-      print("   uvicorn main:app --reload")
+      print("   Make sure FastAPI is running (uvicorn main:app --reload)")
     except Exception as e:
       print(f"❌ Error: {e}")
     
     # Move to next coordinate continuously
-    current_index = (current_index + 1) % len(ROUTE_COORDINATES)
+    current_index = (current_index + 1) % len(route_coords)
     
     print(f"⏱️ Next update in 5 seconds...\n")
     time.sleep(5)
