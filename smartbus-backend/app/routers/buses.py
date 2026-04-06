@@ -46,21 +46,12 @@ async def get_bus(bus_id: str):
     db_client = get_firestore_client()
     if not db_client:
         raise HTTPException(status_code=500, detail="Database not initialized")
-    
-    # Normalize bus_id: "BUS_001" -> "bus001", "bus001" stays "bus001"
-    normalized_id = bus_id.lower().replace("_", "")
-    
-    # Try normalized ID first, then original
-    bus_ref = db_client.collection('buses').document(normalized_id)
+        
+    bus_ref = db_client.collection('buses').document(bus_id)
     doc = bus_ref.get()
     
     if not doc.exists:
-        # Fallback: try original ID as-is
-        bus_ref = db_client.collection('buses').document(bus_id)
-        doc = bus_ref.get()
-    
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail=f"Bus not found: {bus_id}")
+        raise HTTPException(status_code=404, detail="Bus not found")
         
     bus_data = doc.to_dict()
     bus_data['bus_id'] = doc.id
@@ -82,11 +73,7 @@ async def get_bus(bus_id: str):
 
 @router.get("/bus/{bus_id}/route", response_model=List[StopInfo])
 async def get_route(bus_id: str):
-    # Normalize: "BUS_001" -> "bus001"
-    normalized_id = bus_id.lower().replace("_", "")
-    stops = await get_bus_route(normalized_id)
-    if not stops:
-        stops = await get_bus_route(bus_id)  # fallback
+    stops = await get_bus_route(bus_id)
     if not stops:
         raise HTTPException(status_code=404, detail="Route not found")
     return stops
