@@ -80,11 +80,35 @@ async def get_route(bus_id: str):
 
 @router.get("/bus/{bus_id}/details", response_model=BusInfo)
 async def get_bus_details(bus_id: str):
+    """
+    Get comprehensive bus details including stops and route polyline.
+    If polyline not in bus document, fetches from routes collection.
+    """
     bus = await get_bus(bus_id)
     
     # Get stops for the bus
     stops = await get_bus_route(bus_id)
     if stops:
         bus.stops = stops
-        
+    
+    # If no polyline in bus, try to fetch from route
+    if not bus.route_polyline:
+        try:
+            db_client = get_firestore_client()
+            if db_client:
+                # Try to find route matching bus locations
+                routes_ref = db_client.collection('routes')
+                query = routes_ref.where('from_location', '==', bus.from_location)
+                docs = list(query.stream())
+                
+                for doc in docs:
+                    route_data = doc.to_dict()
+                    if route_data.get('to_location') == bus.to_location:
+                        polyline = route_data.get('route_polyline')
+                        if polyline:
+                            bus.route_polyline = polyline
+                            break
+        except Exception as e:
+            print(f"Error fetching polyline from routes: {e}")
+    
     return bus

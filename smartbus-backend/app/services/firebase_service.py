@@ -4,6 +4,7 @@ import logging
 import os
 import json
 from datetime import datetime
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -197,3 +198,140 @@ async def get_all_buses(
     except Exception as e:
         print(f"Error getting buses: {e}")
         return []
+
+def decode_polyline(polyline_str: str):
+    """Decode Google Maps encoded polyline to coordinates."""
+    index, lat, lng = 0, 0, 0
+    coordinates = []
+    
+    while index < len(polyline_str):
+        # Decode latitude
+        shift, result = 0, 0
+        while True:
+            byte = ord(polyline_str[index]) - 63
+            index += 1
+            result |= (byte & 0x1f) << shift
+            shift += 5
+            if byte < 0x20:
+                break
+        d_lat = ~(result >> 1) if (result & 1) else (result >> 1)
+        lat += d_lat
+
+        # Decode longitude
+        shift, result = 0, 0
+        while True:
+            byte = ord(polyline_str[index]) - 63
+            index += 1
+            result |= (byte & 0x1f) << shift
+            shift += 5
+            if byte < 0x20:
+                break
+        d_lng = ~(result >> 1) if (result & 1) else (result >> 1)
+        lng += d_lng
+        
+        coordinates.append({"lat": lat / 1e5, "lng": lng / 1e5})
+    
+    return coordinates
+
+async def generate_polyline_from_route(route_id: str = "ROUTE_CB", bus_id: str = None):
+    """
+    Generate polyline from route stops using Google Maps Directions API.
+    Stores the polyline in the routes collection and optionally in a specific bus.
+    """
+    try:
+        if not firebase_admin._apps:
+            initialize_firebase()
+        
+        api_key = os.getenv("GOOGLE_MAPS_API_KEY")
+        if not api_key:
+            print("❌ GOOGLE_MAPS_API_KEY not set in environment")
+            return False
+        
+        fs = firestore.client()
+        
+        # Fetch route stops
+        route_doc = fs.collection("routes").document(route_id).get()
+        if not route_doc.exists:
+            print(f"❌ Route {route_id} not found")
+            return False
+        
+        route_data = route_doc.to_dict()
+        stops = route_data.get("stops", [])
+        
+        if not stops or len(stops) < 2:
+            print(f"❌ Route {route_id} has insufficient stops")
+            return False
+        
+        # Sort stops by order
+        stops.sort(key=lambda x: x.get('order', 0))
+        
+        print(f"🚗 Generating polyline from {len(stops)} stops...")
+        
+        # Call Google Maps Directions API
+        origin = f"{stops[0]['lat']},{stops[0]['lng']}"
+        destination = f"{stops[-1]['lat']},{stops[-1]['lng']}"
+        waypoint_parts = [f"via:{s['lat']},{s['lng']}" for s in stops[1:-1]]
+        waypoints = "optimize:false|" + "|".join(waypoint_parts) if waypoint_parts else ""
+        
+        url = "https://maps.googleapis.com/maps/api/directions/json"
+        params = {
+            "origin": origin,
+            "destination": destination,
+            "waypoints": waypoints if waypoints else None,
+            "mode": "driving",
+            "key": api_key
+        }
+        
+        # Remove None values
+        params = {k: v for k, v in params.items() if v is not None}
+        
+        response = httpx.get(url, params=params, timeout=30)
+        data = response.json()
+        
+        if data.get("status") != "OK":
+            print(f"❌ Google Maps API Error: {data.get('status')} - {data.get('error_message', 'Unknown error')}")
+            return False
+        
+        # Extract polyline from all route legs
+        all_coords = []
+        for route in data.get("routes", []):
+            for leg in route.get("legs", []):
+                for step in leg.get("steps", []):
+                    encoded = step.get("polyline", {}).get("points", "")
+                    if encoded:
+                        all_coords.extend(decode_polyline(encoded))
+        
+        if not all_coords:
+            print("❌ No polyline data extracted from API response")
+            return False
+        
+        # Ensure start and end points match exactly
+        first_stop = {"lat": stops[0]["lat"], "lng": stops[0]["lng"]}
+        if not all_coords or all_coords[0] != first_stop:
+            all_coords.insert(0, first_stop)
+        
+        last_stop = {"lat": stops[-1]["lat"], "lng": stops[-1]["lng"]}
+        if all_coords[-1] != last_stop:
+            all_coords.append(last_stop)
+        
+        # Update route with polyline
+        fs.collection("routes").document(route_id).update({
+            "route_polyline": all_coords
+        })
+        print(f"✅ Updated {route_id} with {len(all_coords)} polyline points")
+        
+        # Optionally update specific bus
+        if bus_id:
+            fs.collection("buses").document(bus_id).update({
+                "route_polyline": all_coords,
+                "stops": stops
+            })
+            print(f"✅ Updated bus {bus_id} with polyline")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error generating polyline: {e}")
+        import traceback
+        traceback.print_exc()
+        return False

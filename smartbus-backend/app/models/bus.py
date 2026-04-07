@@ -15,5 +15,5 @@ class BusInfo(BaseModel):
     last_lat: Optional[float] = None
     last_lng: Optional[float] = None
     last_updated: Optional[str] = None
-    route_polyline: Optional[List[List[float]]] = None # Array of [lng, lat] for frontend compatibility
+    route_polyline: Optional[List[Any]] = None # Array of [lng, lat] or objects for frontend compatibility
     stops: Optional[List[Any]] = None

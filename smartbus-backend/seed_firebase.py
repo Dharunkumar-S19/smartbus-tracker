@@ -6,65 +6,33 @@ from dotenv import load_dotenv
 # Load env variables automatically
 load_dotenv()
 
-# Complete Stops Array for Kattampatti -> Gandhipuram
+# Full Route CB-01: Kattampatti -> Gandhipuram (22 New Stops)
 stops = [
-  {
-    "stop_id": "S1",
-    "name": "Kattampatti Bus Stop",
-    "lat": 11.0394,
-    "lng": 77.0624,
-    "scheduled_time": "06:00 AM",
-    "order": 1
-  },
-  {
-    "stop_id": "S2",
-    "name": "Vellalore",
-    "lat": 11.0012,
-    "lng": 76.9876,
-    "scheduled_time": "06:15 AM",
-    "order": 2
-  },
-  {
-    "stop_id": "S3",
-    "name": "Hopes College",
-    "lat": 11.0168,
-    "lng": 76.9558,
-    "scheduled_time": "06:25 AM",
-    "order": 3
-  },
-  {
-    "stop_id": "S4",
-    "name": "Peelamedu",
-    "lat": 11.0275,
-    "lng": 76.9847,
-    "scheduled_time": "06:35 AM",
-    "order": 4
-  },
-  {
-    "stop_id": "S5",
-    "name": "Avinashi Road",
-    "lat": 11.0168,
-    "lng": 76.9676,
-    "scheduled_time": "06:45 AM",
-    "order": 5
-  },
-  {
-    "stop_id": "S6",
-    "name": "RS Puram",
-    "lat": 11.0075,
-    "lng": 76.9632,
-    "scheduled_time": "06:55 AM",
-    "order": 6
-  },
-  {
-    "stop_id": "S7",
-    "name": "Gandhipuram Bus Stand",
-    "lat": 11.0168,
-    "lng": 76.9558,
-    "scheduled_time": "07:00 AM",
-    "order": 7
-  }
+    {"stop_id": "S1", "name": "Kattampatti", "lat": 10.809496565309098, "lng": 77.14604932743066, "scheduled_time": "06:00 AM", "order": 1},
+    {"stop_id": "S2", "name": "Periakalandai", "lat": 10.816670561175952, "lng": 77.12782916550294, "scheduled_time": "06:03 AM", "order": 2},
+    {"stop_id": "S3", "name": "Mandrampalayam", "lat": 10.826942208460826, "lng": 77.10677549002284, "scheduled_time": "06:07 AM", "order": 3},
+    {"stop_id": "S4", "name": "Vadasithur", "lat": 10.833748563706688, "lng": 77.08114753056462, "scheduled_time": "06:12 AM", "order": 4},
+    {"stop_id": "S5", "name": "Sri Eshwar College of Engineering", "lat": 10.829134557721533, "lng": 77.06150330092058, "scheduled_time": "06:16 AM", "order": 5},
+    {"stop_id": "S6", "name": "Kondampatti", "lat": 10.828756080040138, "lng": 77.05616265968294, "scheduled_time": "06:18 AM", "order": 6},
+    {"stop_id": "S7", "name": "Kinathukadavu Old", "lat": 10.824513970841387, "lng": 77.01931555691195, "scheduled_time": "06:24 AM", "order": 7},
+    {"stop_id": "S8", "name": "Kinathukadavu", "lat": 10.817856004087684, "lng": 77.0176961337032, "scheduled_time": "06:26 AM", "order": 8},
+    {"stop_id": "S9", "name": "V.S.B. College of Engineering", "lat": 10.843844433243145, "lng": 77.01514578099231, "scheduled_time": "06:31 AM", "order": 9},
+    {"stop_id": "S10", "name": "Othakal Mandapam", "lat": 10.88633550645706, "lng": 77.00093181756027, "scheduled_time": "06:37 AM", "order": 10},
+    {"stop_id": "S11", "name": "Malumichampatti", "lat": 10.904239516149742, "lng": 76.9981477299843, "scheduled_time": "06:41 AM", "order": 11},
+    {"stop_id": "S12", "name": "Karpagam University", "lat": 10.91797095065741, "lng": 76.98597064222041, "scheduled_time": "06:45 AM", "order": 12},
+    {"stop_id": "S13", "name": "Eachanari", "lat": 10.92464609421936, "lng": 76.9825317865501, "scheduled_time": "06:48 AM", "order": 13},
+    {"stop_id": "S14", "name": "Rathinam College", "lat": 10.930431142998776, "lng": 76.98046170465307, "scheduled_time": "06:51 AM", "order": 14},
+    {"stop_id": "S15", "name": "Sundarapuram", "lat": 10.956042793486363, "lng": 76.97295763953315, "scheduled_time": "06:56 AM", "order": 15},
+    {"stop_id": "S16", "name": "Kurichi Pirivu", "lat": 10.962807792438708, "lng": 76.97191000206529, "scheduled_time": "06:59 AM", "order": 16},
+    {"stop_id": "S17", "name": "Athupalam", "lat": 10.974942558542708, "lng": 76.96148466016321, "scheduled_time": "07:03 AM", "order": 17},
+    {"stop_id": "S18", "name": "Athupalam Junction", "lat": 10.977080474099864, "lng": 76.96154284703684, "scheduled_time": "07:05 AM", "order": 18},
+    {"stop_id": "S19", "name": "Ukkadam", "lat": 10.990073425978379, "lng": 76.96124249044696, "scheduled_time": "07:09 AM", "order": 19},
+    {"stop_id": "S20", "name": "Town Hall", "lat": 10.99413610827235, "lng": 76.96230427069344, "scheduled_time": "07:13 AM", "order": 20},
+    {"stop_id": "S21", "name": "Government Hospital Coimbatore", "lat": 10.994732242086723, "lng": 76.96913221521321, "scheduled_time": "07:17 AM", "order": 21},
+    {"stop_id": "S22", "name": "Gandhipuram", "lat": 11.013884522338339, "lng": 76.96744726678304, "scheduled_time": "07:22 AM", "order": 22}
 ]
+
+
 
 def offset_schedule(base_stops, hours_offset, minutes_offset):
     import datetime
@@ -273,13 +241,13 @@ def run_seed():
         print("Writing Buses Collection...")
         buses_ref = db.collection('buses')
         for doc_id, data in buses_to_seed.items():
-            buses_ref.document(doc_id).set(data)
+            buses_ref.document(doc_id).set(data, merge=True)
             print(f" ✅ Seeded bus: {doc_id}")
 
         print("Writing Routes Collection...")
         routes_ref = db.collection('routes')
         for doc_id, data in routes_to_seed.items():
-            routes_ref.document(doc_id).set(data)
+            routes_ref.document(doc_id).set(data, merge=True)
             print(f" ✅ Seeded route: {doc_id}")
             
         print("\n🎉 Seeding Finished Successfully!")
