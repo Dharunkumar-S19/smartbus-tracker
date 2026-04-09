@@ -6,9 +6,12 @@ import { UserProfile } from '../types';
 
 export const useAuth = () => {
     const [user, setUser] = useState<UserProfile | null>(null);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        let mounted = true;
+
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: User | null) => {
             try {
                 if (firebaseUser) {
@@ -17,32 +20,52 @@ export const useAuth = () => {
                     const docSnap = await getDoc(docRef);
 
                     if (docSnap.exists()) {
-                        setUser(docSnap.data() as UserProfile);
+                        if (mounted) {
+                            setUser(docSnap.data() as UserProfile);
+                            setIsAuthenticated(true);
+                        }
                     } else {
                         // Fallback if profile doesn't exist yet but user is logged in
-                        setUser({
+                        const fallbackUser: UserProfile = {
                             uid: firebaseUser.uid,
                             name: firebaseUser.displayName || 'User',
                             email: firebaseUser.email || '',
-                        });
+                            role: 'passenger', // Default role
+                        };
+                        if (mounted) {
+                            setUser(fallbackUser);
+                            setIsAuthenticated(true);
+                        }
                     }
                 } else {
-                    setUser(null);
+                    // User is not logged in
+                    if (mounted) {
+                        setUser(null);
+                        setIsAuthenticated(false);
+                    }
                 }
             } catch (error) {
                 console.error('Error fetching user profile:', error);
-                setUser(null);
+                if (mounted) {
+                    setUser(null);
+                    setIsAuthenticated(false);
+                }
             } finally {
-                setLoading(false);
+                if (mounted) {
+                    setLoading(false);
+                }
             }
         });
 
-        return () => unsubscribe();
+        return () => {
+            mounted = false;
+            unsubscribe();
+        };
     }, []);
 
     return {
         user,
         loading,
-        isAuthenticated: !!user,
+        isAuthenticated,
     };
 };

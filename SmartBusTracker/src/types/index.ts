@@ -2,7 +2,7 @@ export interface UserProfile {
   uid: string;
   name: string;
   email: string;
-  role: 'passenger' | 'driver';
+  role: 'passenger' | 'driver' | 'admin';
   assignedBusId?: string;
 }
 
@@ -52,4 +52,6 @@ export type RootStackParamList = {
   Register: undefined;
   Profile: undefined;
   DriverDashboard: undefined;
+  AdminDashboard: undefined;
+  DriverManager: undefined;
 };

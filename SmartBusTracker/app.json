@@ -13,12 +13,23 @@
     },
     "ios": {
       "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "We need your location to show your position on the map and track buses near you",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need your location to show your position on the map and track buses near you",
+        "NSCameraUsageDescription": "Camera access is needed for QR code scanning if enabled"
+      },
       "config": {
         "googleMapsApiKey": "AIzaSyBf-t-CAOaefmxpoLSwZoV1JotdNWWlAJU"
       }
     },
     "android": {
       "package": "com.dharunkumar.smartbustracker",
+      "permissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.INTERNET",
+        "android.permission.CAMERA"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

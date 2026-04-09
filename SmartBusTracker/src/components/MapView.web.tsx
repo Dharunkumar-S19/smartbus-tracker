@@ -2,10 +2,22 @@ import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GoogleMap, useJsApiLoader, MarkerF, PolylineF } from '@react-google-maps/api';
 
+interface Coordinate {
+    lat: number;
+    lng: number;
+}
+
+interface StopMarker {
+    name: string;
+    lat: number;
+    lng: number;
+}
+
 interface MapViewWebProps {
     latitude: number;
     longitude: number;
-    routeCoordinates?: [number, number][]; // Array of [longitude, latitude]
+    polyline?: Coordinate[];
+    stops?: StopMarker[];
 }
 
 const containerStyle = {
@@ -13,7 +25,7 @@ const containerStyle = {
     height: '100%'
 };
 
-export default function MapViewWeb({ latitude, longitude, routeCoordinates }: MapViewWebProps) {
+export default function MapViewWeb({ latitude, longitude, polyline, stops }: MapViewWebProps) {
     const { isLoaded } = useJsApiLoader({
         id: 'google-map-script',
         googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || ''
@@ -24,12 +36,9 @@ export default function MapViewWeb({ latitude, longitude, routeCoordinates }: Ma
         lng: longitude
     }), [latitude, longitude]);
 
-    const path = useMemo(() => {
-        return routeCoordinates?.map(coord => ({
-            lat: coord[1],
-            lng: coord[0]
-        })) || [];
-    }, [routeCoordinates]);
+    const validStops = stops && Array.isArray(stops)
+        ? stops.filter(stop => stop && stop.lat && stop.lng && stop.name)
+        : [];
 
     if (!isLoaded) return <View style={styles.container} />;
 
@@ -44,16 +53,39 @@ export default function MapViewWeb({ latitude, longitude, routeCoordinates }: Ma
                     zoomControl: false,
                 }}
             >
-                {path.length > 0 && (
+                {polyline && polyline.length > 0 && (
                     <PolylineF
-                        path={path}
+                        path={polyline}
                         options={{
-                            strokeColor: "#2563EB",
+                            strokeColor: '#3B82F6',
                             strokeOpacity: 0.8,
-                            strokeWeight: 4,
+                            strokeWeight: 6,
+                            geodesic: true,
                         }}
                     />
                 )}
+                
+                {validStops.length > 0 && validStops.map((stop, index) => (
+                    <MarkerF
+                        key={`stop-${index}`}
+                        position={{ lat: stop.lat, lng: stop.lng }}
+                        title={stop.name}
+                        icon={{
+                            path: google.maps.SymbolPath.CIRCLE,
+                            fillColor: '#F59E0B',
+                            fillOpacity: 1,
+                            strokeColor: '#ffffff',
+                            strokeWeight: 2,
+                            scale: 14,
+                        }}
+                        label={{
+                            text: `${index + 1}`,
+                            color: '#ffffff',
+                            fontSize: '12px',
+                            fontWeight: 'bold',
+                        }}
+                    />
+                ))}
                 
                 <MarkerF
                     position={center}

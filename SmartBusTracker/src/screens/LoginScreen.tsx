@@ -51,6 +51,8 @@ export default function LoginScreen() {
                     setError(profileError);
                 } else if (profile?.role === 'driver') {
                     navigation.replace('DriverDashboard');
+                } else if (profile?.role === 'admin') {
+                    navigation.replace('AdminDashboard');
                 } else {
                     navigation.replace('Home');
                 }

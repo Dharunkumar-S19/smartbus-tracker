@@ -23,7 +23,7 @@ import Animated, {
 import { Ionicons, Feather } from '@expo/vector-icons';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 
-import { RootStackParamList, GpsData } from '../types';
+import { RootStackParamList, GpsData, StopInfo } from '../types';
 import { KalmanFilter } from '../utils/kalmanFilter';
 import { NotificationService } from '../services/notificationService';
 import { ref, onValue, off } from 'firebase/database';
@@ -67,8 +67,10 @@ export default function LiveTrackingScreen() {
     // --- State ---
     const [userLocation, setUserLocation] = useState<{ latitude: number, longitude: number } | null>(null);
     const [busLocation, setBusLocation] = useState<{ latitude: number, longitude: number } | null>(null);
-    const [routePolyline, setRoutePolyline] = useState<[number, number][] | null>(null);
     const [journeyData, setJourneyData] = useState<Partial<GpsData>>({});
+    const [polyline, setPolyline] = useState<Array<{ lat: number, lng: number }> | null>(null);
+    const [stops, setStops] = useState<StopInfo[]>([]);
+    const [locationTimeout, setLocationTimeout] = useState(false);
 
     // Track notifications to prevent spamming
     const hasNotifiedForStop = useRef<Record<string, boolean>>({});
@@ -166,34 +168,23 @@ export default function LiveTrackingScreen() {
                 if (mounted) setUserLocation(DEFAULT_COORD);
             }
 
-            // 2.5 Fetch Bus Route Details (including polyline) from backend
-            const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://smartbus-tracker-z7tn.onrender.com';
-            const detailsUrl = `${apiUrl}/api/bus/${busId}/details`;
-            console.log(`Fetching bus details from: ${detailsUrl}`);
-            try {
-                const response = await fetch(detailsUrl);
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log('Bus details received:', JSON.stringify(data).slice(0, 200));
-                    if (data && data.route_polyline && data.route_polyline.length > 0) {
-                        // Map from [{"lat": 11, "lng": 77}, ...] to [[lng, lat], ...]
-                        const formatted: [number, number][] = data.route_polyline.map((p: any) => [p.lng, p.lat]);
-                        setRoutePolyline(formatted);
-                        console.log(`Loaded ${formatted.length} road polyline points for ${busId}`);
-                    } else {
-                        console.warn('No route_polyline in bus details response');
-                    }
-                } else {
-                    console.warn(`Bus details fetch failed: HTTP ${response.status}`);
-                }
-            } catch (error) {
-                console.error('Failed to fetch bus details:', error);
-            }
+
 
             // 3. Firebase RTDB Subscription for Bus
             const busRef = ref(rtdb, `live_locations/${busId}`);
+            
+            // Safety timeout: if bus data doesn't arrive within 5 seconds, show map with default location
+            const busLocationTimeout = setTimeout(() => {
+                if (mounted && !busLocation) {
+                    console.warn(`Bus location not available for ${busId}, showing default location`);
+                    setLocationTimeout(true);
+                    setBusLocation(DEFAULT_COORD);
+                }
+            }, 5000);
+
             onValue(busRef, (snapshot) => {
                 if (!mounted) return;
+                clearTimeout(busLocationTimeout);
                 const rawData = snapshot.val();
                 if (rawData) {
                     // Map RTDB data to logic
@@ -215,10 +206,14 @@ export default function LiveTrackingScreen() {
                     const smoothLng = lngFilter.current.filter(data.lng);
 
                     setBusLocation({ latitude: smoothLat, longitude: smoothLng });
+                    setLocationTimeout(false);
                     setJourneyData(data);
                     
                     // Stop simulation if it was running
                     stopGpsSimulation();
+                } else {
+                    // No data from Firebase, set timeout flag
+                    setLocationTimeout(true);
                 }
             });
 
@@ -301,6 +296,32 @@ export default function LiveTrackingScreen() {
         };
     }, []);
 
+    // Fetch bus details including polyline and stops
+    useEffect(() => {
+        const fetchBusDetails = async () => {
+            try {
+                const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://smartbus-tracker-z7tn.onrender.com';
+                const response = await fetch(`${apiUrl}/api/bus/${busId}/details`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.route_polyline && Array.isArray(data.route_polyline)) {
+                        setPolyline(data.route_polyline);
+                    }
+                    if (data.stops && Array.isArray(data.stops)) {
+                        // Filter and map stops to ensure they have required fields
+                        const validStops = data.stops.filter((stop: any) => stop.lat && stop.lng && stop.name);
+                        setStops(validStops);
+                        console.log(`Loaded ${validStops.length} stops`);
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to fetch bus details:', error);
+            }
+        };
+
+        fetchBusDetails();
+    }, [busId]);
+
     return (
         <View style={styles.container}>
             {/* --- IN-APP ALERT BANNER --- */}
@@ -330,17 +351,18 @@ export default function LiveTrackingScreen() {
 
             {/* --- 2. MAP SECTION --- */}
             <View style={styles.mapContainer}>
-                {!busLocation || !userLocation ? (
+                {locationTimeout || busLocation ? (
+                    <MapView
+                        latitude={busLocation?.latitude || DEFAULT_COORD.latitude}
+                        longitude={busLocation?.longitude || DEFAULT_COORD.longitude}
+                        polyline={polyline || undefined}
+                        stops={stops.length > 0 ? stops : undefined}
+                    />
+                ) : (
                     <View style={styles.loadingContainer}>
                         <ActivityIndicator size="large" color="#2563EB" />
                         <Text style={styles.loadingText}>Locating bus...</Text>
                     </View>
-                ) : (
-                    <MapView
-                        latitude={busLocation.latitude}
-                        longitude={busLocation.longitude}
-                        routeCoordinates={routePolyline || undefined}
-                    />
                 )}
             </View>
 

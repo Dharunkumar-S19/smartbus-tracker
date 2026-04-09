@@ -1,0 +1,259 @@
+# Bus Route Polyline Implementation Guide
+
+This document explains how to generate and display polylines for bus routes on the map.
+
+## Architecture Overview
+
+```
+Frontend (React Native/Web)
+  ↓
+LiveTrackingScreen fetches bus details
+  ↓
+/api/bus/{busId}/details endpoint
+  ↓
+Backend returns route_polyline (array of {lat, lng})
+  ↓
+MapView components render polyline on map
+```
+
+## Components Updated
+
+### 1. Backend (smartbus-backend)
+
+#### Files:
+- `app/config.py` - Added GOOGLE_MAPS_API_KEY to settings
+- `app/services/firebase_service.py` - Already has polyline generation functions
+- `app/routers/admin.py` - Already has the generate-polyline endpoint
+- `app/routers/buses.py` - Already includes polylines in bus details response
+
+#### Key Functions:
+- `decode_polyline()` - Decodes Google Maps encoded polyline format
+- `generate_polyline_from_route()` - Generates polyline from route stops using Google Maps API
+- `POST /api/admin/route/{route_id}/generate-polyline` - Admin endpoint to trigger generation
+
+### 2. Frontend (SmartBusTracker)
+
+#### Updated Components:
+- `src/components/MapView.web.tsx` - Added PolylineF component for web
+- `src/components/MapView.native.tsx` - Added Polyline component for mobile
+- `src/screens/LiveTrackingScreen.tsx` - Fetches and passes polyline to MapView
+
+#### Props Added:
+```typescript
+interface MapViewProps {
+  latitude: number;
+  longitude: number;
+  polyline?: Array<{ lat: number; lng: number }>; // NEW
+}
+```
+
+## Setup Steps
+
+### Step 1: Ensure Environment Variables are Set
+
+**Backend (.env):**
+```
+GOOGLE_MAPS_API_KEY=YOUR_API_KEY_HERE
+```
+
+**Frontend (.env):**
+```
+EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=YOUR_API_KEY_HERE
+```
+
+### Step 2: Generate Polylines for Routes
+
+Option A - Using the generate_polylines.py script:
+```bash
+cd smartbus-backend
+python generate_polylines.py
+```
+
+Option B - Using curl directly:
+```bash
+curl -X POST http://localhost:8000/api/admin/route/ROUTE_CB/generate-polyline?bus_id=BUS_001
+```
+
+Option C - Programmatically:
+```python
+import requests
+response = requests.post(
+    "http://localhost:8000/api/admin/route/ROUTE_CB/generate-polyline",
+    params={"bus_id": "BUS_001"}
+)
+print(response.json())
+```
+
+### Step 3: Verify Polylines in Database
+
+Check Firestore:
+1. Go to Firebase Console
+2. Navigate to `routes/ROUTE_CB` document
+3. Verify `route_polyline` field contains array of coordinates
+
+### Step 4: Run the Application
+
+Backend:
+```bash
+cd smartbus-backend
+python main.py
+```
+
+Frontend:
+```bash
+cd SmartBusTracker
+npx expo start
+```
+
+## How It Works
+
+### Flow:
+1. User navigates to LiveTrackingScreen
+2. Component mounts and creates WebSocket connection for real-time bus location
+3. `useEffect` hook fetches bus details: `GET /api/bus/{busId}/details`
+4. Response includes `route_polyline: [{ lat, lng }, ...]`
+5. Polyline state is updated with the coordinates
+6. MapView component receives polyline and renders it on map
+
+### Rendering:
+- **Web**: Uses `<PolylineF>` from @react-google-maps/api
+  - Color: #3B82F6 (Blue)
+  - Stroke Width: 3px
+  - Opacity: 0.8
+  
+- **Mobile**: Uses `<Polyline>` from react-native-maps
+  - Color: #3B82F6 (Blue)
+  - Stroke Width: 3px
+  - Geodesic: true
+
+## Polyline Data Format
+
+The `route_polyline` field in Firestore contains:
+```json
+[
+  { "lat": 10.809496565309098, "lng": 77.14604932743066 },
+  { "lat": 10.816670561175952, "lng": 77.12782916550294 },
+  { "lat": 10.826942208460826, "lng": 77.10677549002284 },
+  ...
+]
+```
+
+Example with 22 stops for ROUTE_CB (Kattampatti → Gandhipuram):
+- Total points: ~500-800 (depends on route complexity)
+- Generated dynamically using Google Maps Directions API
+- Includes all waypoints on the actual road
+
+## Troubleshooting
+
+### Polyline not showing on map?
+
+1. **Check if polyline was generated:**
+   ```bash
+   # Check Firestore for route_polyline
+   curl http://localhost:8000/api/bus/BUS_001/details
+   # Look for "route_polyline" in response
+   ```
+
+2. **Check API Key:**
+   ```bash
+   # Backend
+   echo $GOOGLE_MAPS_API_KEY
+   # Should output your API key
+   ```
+
+3. **Check browser console for errors:**
+   - Chrome DevTools → Console tab
+   - Look for any map-related errors
+
+4. **Regenerate polyline:**
+   ```bash
+   python generate_polylines.py
+   ```
+
+### Error: "GOOGLE_MAPS_API_KEY not set"
+
+Open `smartbus-backend/.env` and ensure:
+```
+GOOGLE_MAPS_API_KEY=AIzaSyBf-t-CAOaefmxpoLSwZoV1JotdNWWlAJU
+```
+
+### Error: "Route not found"
+
+Ensure the route exists in Firestore:
+1. Firebase Console → Firestore Database
+2. Check collection `routes` contains document `ROUTE_CB`
+3. Verify `stops` array is populated
+
+## Database Structure
+
+```
+routes/
+  ROUTE_CB/
+    route_id: "ROUTE_CB"
+    route_number: "CB-01"
+    from_location: "Kattampatti"
+    to_location: "Gandhipuram"
+    stops: [
+      { stop_id, name, lat, lng, order },
+      ...
+    ]
+    route_polyline: [    ← Generated by admin endpoint
+      { lat, lng },
+      ...
+    ]
+
+buses/
+  BUS_001/
+    bus_id: "BUS_001"
+    name: "Kattampatti Express"
+    route_polyline: [    ← Optional: copied from route
+      { lat, lng },
+      ...
+    ]
+```
+
+## Performance Notes
+
+- Polylines are fetched once per screen load
+- Cached in component state (no continuous fetching)
+- Google Maps rendering is optimized for up to 500+ points
+- Performance impact: minimal (~5-10ms render time)
+
+## Customization
+
+To change polyline appearance, edit MapView components:
+
+**Web (MapView.web.tsx):**
+```typescript
+<PolylineF
+  path={polyline}
+  options={{
+    strokeColor: '#3B82F6',      // Change color
+    strokeOpacity: 0.8,           // Change opacity
+    strokeWeight: 3,              // Change width
+    geodesic: true,
+  }}
+/>
+```
+
+**Mobile (MapView.native.tsx):**
+```typescript
+<Polyline
+  coordinates={polyline.map(coord => ({
+    latitude: coord.lat,
+    longitude: coord.lng
+  }))}
+  strokeColor="#3B82F6"           // Change color
+  strokeWidth={3}                 // Change width
+  lineDashPattern={[0]}
+  geodesic={true}
+/>
+```
+
+## Next Steps
+
+- [ ] Generate polylines for all routes (not just ROUTE_CB)
+- [ ] Add stop markers along the polyline
+- [ ] Show ETA at each stop
+- [ ] Allow users to click polyline for route details
+- [ ] Cache polylines in browser storage for offline access

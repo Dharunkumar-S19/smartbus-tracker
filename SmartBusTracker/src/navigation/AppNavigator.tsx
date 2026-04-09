@@ -10,6 +10,8 @@ import RegisterScreen from '../screens/RegisterScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import DriverLoginScreen from '../screens/DriverLoginScreen';
 import DriverDashboard from '../screens/DriverDashboard';
+import AdminDashboard from '../screens/AdminDashboard';
+import DriverManager from '../screens/DriverManagerScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -42,6 +44,17 @@ export default function AppNavigator() {
             <Stack.Screen
                 name="DriverDashboard"
                 component={DriverDashboard}
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="AdminDashboard"
+                component={AdminDashboard}
+                options={{ headerShown: false }}
+            />
+            {/* @ts-ignore */}
+            <Stack.Screen
+                name="DriverManager"
+                component={DriverManager}
                 options={{ headerShown: false }}
             />
         </Stack.Navigator>
