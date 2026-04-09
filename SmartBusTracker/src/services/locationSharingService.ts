@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
+import { AppState } from 'react-native';
 
 const LOCATION_TASK_NAME = 'BACKGROUND_BUS_LOCATION_UPDATE';
 
@@ -34,7 +35,7 @@ export const LocationSharingService = {
 
     const isStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
     if (isStarted) {
-      console.log("Location tracking already started");
+      console.log("✅ Location tracking already started");
       return;
     }
 
@@ -50,24 +51,28 @@ export const LocationSharingService = {
         return;
       }
       
-      console.log(`Bus ID saved: ${busId}`);
+      console.log(`✅ Bus ID saved: ${busId}`);
 
-      // Use adaptive settings for battery efficiency (Uber/Zomato style)
+      // Optimized settings for reliable background tracking
+      // - distanceInterval: 15m for balance between accuracy and battery
+      // - deferredUpdatesInterval: 5s to batch updates
+      // - pausesUpdatesAutomatically: false to keep tracking when driving
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        accuracy: Location.Accuracy.Balanced,
-        distanceInterval: 20, // Update only after moving 20 meters
-        deferredUpdatesInterval: 5000, // Wait at least 5 seconds between updates
+        accuracy: Location.Accuracy.BestForNavigation,
+        distanceInterval: 15, // Update after moving 15 meters (was 20m)
+        deferredUpdatesInterval: 5000, // Wait at least 5 seconds between batches
         foregroundService: {
-          notificationTitle: "SmartBus Driver Active",
+          notificationTitle: "🚌 SmartBus Driver Active",
           notificationBody: `Sharing location for Bus ${busId}`,
-          notificationColor: "#007AFF"
+          notificationColor: "#2563EB"
         },
-        pausesUpdatesAutomatically: true,
+        pausesUpdatesAutomatically: false, // Keep tracking even if device is stationary
+        mayShowUserSettingsDialog: true, // Allow user to adjust settings
       });
 
-      console.log(`✅ Tracking started for ${busId}`);
+      console.log(`✅ Background tracking started for ${busId}`);
     } catch (error) {
-      console.error("Error starting location tracking:", error);
+      console.error("❌ Error starting location tracking:", error);
     }
   },
 
@@ -81,20 +86,20 @@ export const LocationSharingService = {
         const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
         await AsyncStorage.removeItem('ACTIVE_BUS_ID');
         
-        console.log('✅ Tracking stopped and bus ID cleared');
+        console.log('✅ Background tracking stopped and bus ID cleared');
       }
     } catch (error) {
-      console.error("Error stopping location tracking:", error);
+      console.error("❌ Error stopping location tracking:", error);
     }
   }
 };
 
-// Define the background task with better error handling
+// Define the background task with comprehensive error handling
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }: any) => {
   try {
     if (error) {
       console.error("❌ Background location task error:", error);
-      return;
+      // Don't return - continue to check for data
     }
 
     if (!data || !data.locations) {
@@ -108,7 +113,8 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }: any) => {
       return;
     }
 
-    const location = locations[0];
+    // Get the most recent location
+    const location = locations[locations.length - 1];
 
     if (location && location.coords) {
       try {
@@ -116,7 +122,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }: any) => {
         const busId = await AsyncStorage.getItem('ACTIVE_BUS_ID');
         
         if (!busId) {
-          console.warn("⚠️ No active bus ID found - location tracking is running but driver hasn't started sharing");
+          console.warn("⚠️ No active bus ID found - resuming when app returns to foreground");
           return;
         }
 
@@ -133,21 +139,41 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }: any) => {
           const response = await fetch(BACKEND_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            // Add timeout
           });
           
           if (response.ok) {
-            console.log(`📍 Location sent for ${busId}: lat=${payload.lat.toFixed(4)}, lng=${payload.lng.toFixed(4)}, speed=${payload.speed}km/h`);
+            console.log(`📍 [BG] ${busId}: ${payload.lat.toFixed(4)}, ${payload.lng.toFixed(4)} @ ${payload.speed}km/h`);
           } else {
-            console.warn("⚠️ Backend returned error:", response.status);
-            throw new Error("Local backend failed");
+            console.warn(`⚠️ [BG] Local backend error: ${response.status}, trying production...`);
+            throw new Error("Local endpoint failed");
           }
         } catch (localErr) {
           // Fallback to production
-          console.log("🔄 Trying production URL...");
           try {
             const response = await fetch(PROD_URL, {
               method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            if (response.ok) {
+              console.log(`📍 [BG-PROD] ${busId}: location sent`);
+            } else {
+              console.warn(`⚠️ [BG] Production backend error: ${response.status}`);
+            }
+          } catch (prodErr) {
+            console.warn(`⚠️ [BG] Could not reach any backend: ${prodErr}`);
+          }
+        }
+      } catch (err) {
+        console.error("Error in background task location processing:", err);
+      }
+    }
+  } catch (err) {
+    console.error("Critical error in background task:", err);
+  }
+});
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload)
             });

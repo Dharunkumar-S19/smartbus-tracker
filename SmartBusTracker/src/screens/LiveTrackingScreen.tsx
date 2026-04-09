@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     TouchableOpacity,
     Platform,
-    ActivityIndicator
+    ActivityIndicator,
+    AppState
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -26,6 +27,7 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { RootStackParamList, GpsData, StopInfo } from '../types';
 import { KalmanFilter } from '../utils/kalmanFilter';
 import { NotificationService } from '../services/notificationService';
+import { BusDataCache } from '../utils/busDataCache';
 import { ref, onValue, off } from 'firebase/database';
 import { rtdb } from '../firebase/config';
 import { startGpsSimulation, stopGpsSimulation } from '../utils/mockGpsSimulator';
@@ -70,7 +72,9 @@ export default function LiveTrackingScreen() {
     const [journeyData, setJourneyData] = useState<Partial<GpsData>>({});
     const [polyline, setPolyline] = useState<Array<{ lat: number, lng: number }> | null>(null);
     const [stops, setStops] = useState<StopInfo[]>([]);
-    const [locationTimeout, setLocationTimeout] = useState(false);
+    const [isMapReady, setIsMapReady] = useState(false);
+    const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+    const appState = useRef(AppState.currentState);
 
     // Track notifications to prevent spamming
     const hasNotifiedForStop = useRef<Record<string, boolean>>({});
@@ -79,6 +83,7 @@ export default function LiveTrackingScreen() {
     const latFilter = useRef(new KalmanFilter(1, 0.1));
     const lngFilter = useRef(new KalmanFilter(1, 0.1));
     const wsRef = useRef<WebSocket | null>(null);
+    const requestAbortController = useRef<AbortController | null>(null);
 
     // --- Animations ---
     const pulseAnim = useSharedValue(1);
@@ -122,67 +127,104 @@ export default function LiveTrackingScreen() {
         // await NotificationService.scheduleArrivalNotification(busName, stopName, mins);
     };
 
+    // Handle app state changes to maintain tracking when switching apps
+    const handleAppStateChange = (state: AppState['currentState']) => {
+        appState.current = state;
+        if (state === 'inactive') {
+            console.log('👁️ App moved to background - tracking continues');
+        } else if (state === 'active') {
+            console.log('🟢 App returned to foreground');
+        }
+    };
+
     // --- Lifecycle ---
+    // Initialize map data from cache immediately
     useEffect(() => {
         let mounted = true;
 
-        const initialize = async () => {
-            // 1. Setup Permissions
-            await setupNotifications();
-            let { status } = await Location.requestForegroundPermissionsAsync();
+        const loadCachedData = async () => {
+            try {
+                const cached = await BusDataCache.get(busId);
+                if (mounted && cached) {
+                    setPolyline(cached.polyline);
+                    setStops(cached.stops);
+                    setIsMapReady(true);
+                    console.log('📦 Loaded cached bus data for', busId);
+                }
+            } catch (error) {
+                console.warn('Error loading cached data:', error);
+            }
+        };
 
-            // 2. Continuous User Location Tracking
+        loadCachedData();
+
+        return () => {
+            mounted = false;
+        };
+    }, [busId]);
+
+    // Load live bus location and handle app state changes for background persistence
+    useEffect(() => {
+        let mounted = true;
+        const appStateSubsription = AppState.addEventListener('change', handleAppStateChange);
+
+        const initialize = async () => {
+            // 1. Setup Permissions (quick non-blocking)
+            await setupNotifications();
+            const { status } = await Location.requestForegroundPermissionsAsync();
+
+            // 2. Get initial user position (don't wait for it)
             let userSub: Location.LocationSubscription | null = null;
             if (status === 'granted') {
-                try {
-                    // Get initial position
-                    let loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-                    if (mounted) {
-                        setUserLocation({
-                            latitude: loc.coords.latitude,
-                            longitude: loc.coords.longitude
-                        });
-                    }
-
-                    // Watch for updates
-                    userSub = await Location.watchPositionAsync(
-                        {
-                            accuracy: Location.Accuracy.High,
-                            timeInterval: 5000,
-                            distanceInterval: 10
-                        },
-                        (newLoc) => {
-                            if (mounted) {
-                                setUserLocation({
-                                    latitude: newLoc.coords.latitude,
-                                    longitude: newLoc.coords.longitude
-                                });
-                            }
+                Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+                    .then((loc) => {
+                        if (mounted) {
+                            setUserLocation({
+                                latitude: loc.coords.latitude,
+                                longitude: loc.coords.longitude
+                            });
                         }
-                    );
-                } catch (error) {
-                    console.warn('Failed to get user location');
-                    if (mounted && !userLocation) setUserLocation(DEFAULT_COORD);
-                }
+                    })
+                    .catch(() => {
+                        if (mounted) setUserLocation(DEFAULT_COORD);
+                    });
+
+                // Watch for position updates in background
+                Location.watchPositionAsync(
+                    {
+                        accuracy: Location.Accuracy.High,
+                        timeInterval: 5000,
+                        distanceInterval: 10
+                    },
+                    (newLoc) => {
+                        if (mounted) {
+                            setUserLocation({
+                                latitude: newLoc.coords.latitude,
+                                longitude: newLoc.coords.longitude
+                            });
+                        }
+                    }
+                ).then((sub) => {
+                    userSub = sub;
+                }).catch(() => {
+                    if (mounted) setUserLocation(DEFAULT_COORD);
+                });
             } else {
                 if (mounted) setUserLocation(DEFAULT_COORD);
             }
 
-
-
-            // 3. Firebase RTDB Subscription for Bus
+            // 3. Firebase RTDB Subscription for Bus - FASTER TIMEOUT (2 seconds)
             const busRef = ref(rtdb, `live_locations/${busId}`);
             
-            // Safety timeout: if bus data doesn't arrive within 5 seconds, show map with default location
+            // Reduced timeout: show map after 2 seconds even if bus location not available
             const busLocationTimeout = setTimeout(() => {
                 if (mounted && !busLocation) {
-                    console.warn(`Bus location not available for ${busId}, showing default location`);
-                    setLocationTimeout(true);
+                    console.warn(`Bus location not available for ${busId} within 2s, showing map`);
                     setBusLocation(DEFAULT_COORD);
                 }
-            }, 5000);
+            }, 2000);
 
-            onValue(busRef, (snapshot) => {
+            const unsubscribe = onValue(busRef, (snapshot) => {
                 if (!mounted) return;
                 clearTimeout(busLocationTimeout);
                 const rawData = snapshot.val();
@@ -201,23 +243,17 @@ export default function LiveTrackingScreen() {
                         timestamp: rawData.timestamp ? String(rawData.timestamp) : String(Date.now())
                     };
 
-                    // Only update if we don't have fresh WS data (or always for stability)
+                    // Apply local Kalman filter for visual smoothness
                     const smoothLat = latFilter.current.filter(data.lat);
                     const smoothLng = lngFilter.current.filter(data.lng);
 
                     setBusLocation({ latitude: smoothLat, longitude: smoothLng });
-                    setLocationTimeout(false);
                     setJourneyData(data);
-                    
-                    // Stop simulation if it was running
                     stopGpsSimulation();
-                } else {
-                    // No data from Firebase, set timeout flag
-                    setLocationTimeout(true);
                 }
             });
 
-            // 4. Production WebSocket Subscription
+            // 4. Production WebSocket Subscription (fallback to Firebase)
             const wsUrl = `wss://smartbus-tracker-z7tn.onrender.com/api/ws/bus/${busId}`;
             const ws = new WebSocket(wsUrl);
             wsRef.current = ws;
@@ -228,7 +264,7 @@ export default function LiveTrackingScreen() {
                 try {
                     const rawData = JSON.parse(event.data);
 
-                    // Map backend SmoothedLocation fields to expected GpsData format
+                    // Map backend SmoothedLocation fields
                     const data: GpsData = {
                         lat: rawData.smoothed_lat ?? rawData.raw_lat,
                         lng: rawData.smoothed_lng ?? rawData.raw_lng,
@@ -243,8 +279,7 @@ export default function LiveTrackingScreen() {
                     };
 
                     stopGpsSimulation();
-
-                    // Apply local Kalman filter for visual smoothness
+                    
                     const smoothLat = latFilter.current.filter(data.lat);
                     const smoothLng = lngFilter.current.filter(data.lng);
 
@@ -256,10 +291,7 @@ export default function LiveTrackingScreen() {
                         const stopName = data.nextStop.name;
                         if (!hasNotifiedForStop.current[stopName]) {
                             hasNotifiedForStop.current[stopName] = true;
-
-                            // Fire In-App Banner
                             showBanner();
-                            // Fire OS Push Notification
                             handlePushNotification(stopName, data.etaMinutes);
                         }
                     }
@@ -270,15 +302,17 @@ export default function LiveTrackingScreen() {
 
             ws.onerror = (e) => {
                 console.log("WebSocket connection unavailable. Relying on Firebase RTDB.");
-                // We don't start the simulation immediately if it's BUS_001
                 if (busId !== 'BUS_001') {
                     startGpsSimulation((mockData) => {
                         if (!mounted) return;
                         setBusLocation({ latitude: mockData.lat, longitude: mockData.lng });
                         setJourneyData(mockData);
-                        // ... notification logic omitted for brevity as it's repetitive
                     });
                 }
+            };
+
+            return () => {
+                unsubscribe();
             };
         };
 
@@ -286,6 +320,7 @@ export default function LiveTrackingScreen() {
 
         return () => {
             mounted = false;
+            appStateSubsription.remove();
             if (wsRef.current) {
                 wsRef.current.close();
             }
@@ -293,33 +328,77 @@ export default function LiveTrackingScreen() {
             off(busRef);
             stopGpsSimulation();
             NotificationService.cancelAllNotifications();
+            if (requestAbortController.current) {
+                requestAbortController.current.abort();
+            }
         };
-    }, []);
+    }, [busId]);
 
-    // Fetch bus details including polyline and stops
+    // Fetch bus details in background with caching
     useEffect(() => {
+        let mounted = true;
         const fetchBusDetails = async () => {
             try {
+                setIsLoadingDetails(true);
                 const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://smartbus-tracker-z7tn.onrender.com';
-                const response = await fetch(`${apiUrl}/api/bus/${busId}/details`);
+                
+                // Create abort controller for this request
+                const controller = new AbortController();
+                requestAbortController.current = controller;
+
+                const response = await fetch(`${apiUrl}/api/bus/${busId}/details`, {
+                    signal: controller.signal,
+                    // Add timeout for slow networks
+                });
+                
+                if (!mounted) return;
+
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.route_polyline && Array.isArray(data.route_polyline)) {
-                        setPolyline(data.route_polyline);
+                    
+                    if (mounted) {
+                        if (data.route_polyline && Array.isArray(data.route_polyline)) {
+                            setPolyline(data.route_polyline);
+                        }
+                        if (data.stops && Array.isArray(data.stops)) {
+                            const validStops = data.stops.filter((stop: any) => stop.lat && stop.lng && stop.name);
+                            setStops(validStops);
+                            console.log(`✅ Loaded ${validStops.length} stops`);
+                        }
+
+                        // Cache the data for next time
+                        if (data.route_polyline && data.stops) {
+                            await BusDataCache.set(busId, data.route_polyline, data.stops);
+                        }
+                        
+                        // Mark map as ready if we loaded the polyline from API
+                        if (data.route_polyline) {
+                            setIsMapReady(true);
+                        }
                     }
-                    if (data.stops && Array.isArray(data.stops)) {
-                        // Filter and map stops to ensure they have required fields
-                        const validStops = data.stops.filter((stop: any) => stop.lat && stop.lng && stop.name);
-                        setStops(validStops);
-                        console.log(`Loaded ${validStops.length} stops`);
-                    }
+                } else {
+                    console.warn(`Failed to fetch bus details: ${response.status}`);
                 }
-            } catch (error) {
-                console.warn('Failed to fetch bus details:', error);
+            } catch (error: any) {
+                // Skip error logging for aborted requests
+                if (error.name !== 'AbortError') {
+                    console.warn('Failed to fetch bus details:', error?.message || error);
+                }
+            } finally {
+                if (mounted) {
+                    setIsLoadingDetails(false);
+                }
             }
         };
 
         fetchBusDetails();
+
+        return () => {
+            mounted = false;
+            if (requestAbortController.current) {
+                requestAbortController.current.abort();
+            }
+        };
     }, [busId]);
 
     return (
@@ -351,17 +430,16 @@ export default function LiveTrackingScreen() {
 
             {/* --- 2. MAP SECTION --- */}
             <View style={styles.mapContainer}>
-                {locationTimeout || busLocation ? (
-                    <MapView
-                        latitude={busLocation?.latitude || DEFAULT_COORD.latitude}
-                        longitude={busLocation?.longitude || DEFAULT_COORD.longitude}
-                        polyline={polyline || undefined}
-                        stops={stops.length > 0 ? stops : undefined}
-                    />
-                ) : (
-                    <View style={styles.loadingContainer}>
+                <MapView
+                    latitude={busLocation?.latitude || DEFAULT_COORD.latitude}
+                    longitude={busLocation?.longitude || DEFAULT_COORD.longitude}
+                    polyline={polyline || undefined}
+                    stops={stops.length > 0 ? stops : undefined}
+                />
+                {!busLocation && (
+                    <View style={styles.mapLoadingOverlay}>
                         <ActivityIndicator size="large" color="#2563EB" />
-                        <Text style={styles.loadingText}>Locating bus...</Text>
+                        <Text style={styles.mapLoadingText}>Loading bus location...</Text>
                     </View>
                 )}
             </View>
@@ -449,6 +527,23 @@ const styles = StyleSheet.create({
         marginTop: 12,
         color: '#64748b',
         fontSize: 16,
+    },
+    mapLoadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        zIndex: 10,
+    },
+    mapLoadingText: {
+        marginTop: 12,
+        color: '#64748b',
+        fontSize: 14,
+        fontWeight: '500',
     },
     header: {
         height: Platform.OS === 'ios' ? 100 : 80,
