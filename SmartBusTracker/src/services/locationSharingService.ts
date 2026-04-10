@@ -174,22 +174,4 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }: any) => {
     console.error("Critical error in background task:", err);
   }
 });
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-            });
-            
-            if (response.ok) {
-              console.log(`📍 Location sent to production for ${busId}`);
-            }
-          } catch (prodErr) {
-            console.warn("⚠️ Production URL also failed");
-          }
-        }
-      } catch (err) {
-        console.error("❌ Error processing location:", err);
-      }
-    }
-  } catch (taskError) {
-    console.error("❌ Unhandled error in background task:", taskError);
-  }
-});
+              

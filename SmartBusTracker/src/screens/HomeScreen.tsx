@@ -86,20 +86,27 @@ export default function HomeScreen() {
         let subscription: Location.LocationSubscription | null = null;
         let mounted = true;
 
+        console.log('📍 Starting location initialization...');
+
         (async () => {
             try {
                 let { status } = await Location.requestForegroundPermissionsAsync();
+                console.log('📍 Location permission status:', status);
+                
                 if (status !== 'granted') {
-                    console.log('Permission to access location was denied');
+                    console.log('⚠️ Permission to access location was denied');
                     setLocation(DEFAULT_COORD);
                     setLoadingLocation(false);
                     return;
                 }
 
                 // Initial position
+                console.log('📍 Getting initial position...');
                 let initialLoc = await Location.getCurrentPositionAsync({
                     accuracy: Location.Accuracy.BestForNavigation,
                 });
+                
+                console.log('✅ Initial location:', initialLoc.coords.latitude, initialLoc.coords.longitude);
                 
                 if (mounted) {
                     setLocation({
@@ -126,8 +133,11 @@ export default function HomeScreen() {
                     }
                 );
             } catch (error) {
-                console.warn("Could not fetch location", error);
-                if (!location) setLocation(DEFAULT_COORD);
+                console.warn("❌ Could not fetch location", error);
+                if (!location) {
+                    console.log('📍 Using default coordinates');
+                    setLocation(DEFAULT_COORD);
+                }
                 setLoadingLocation(false);
             }
         })();
@@ -198,7 +208,10 @@ export default function HomeScreen() {
                         <Text style={styles.loadingText}>Finding your location...</Text>
                     </View>
                 ) : (
-                    <MapView latitude={location.latitude} longitude={location.longitude} />
+                    <View style={{ flex: 1, backgroundColor: '#e8f4f8' }}>
+                        {console.log('🗺️ Rendering MapView with location:', location)}
+                        <MapView latitude={location.latitude} longitude={location.longitude} />
+                    </View>
                 )}
             </View>
 

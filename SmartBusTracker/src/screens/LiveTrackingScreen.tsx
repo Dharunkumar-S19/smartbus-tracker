@@ -28,6 +28,7 @@ import { RootStackParamList, GpsData, StopInfo } from '../types';
 import { KalmanFilter } from '../utils/kalmanFilter';
 import { NotificationService } from '../services/notificationService';
 import { BusDataCache } from '../utils/busDataCache';
+import { loadPolylineWithFallback } from '../utils/directPolylineLoader';
 import { ref, onValue, off } from 'firebase/database';
 import { rtdb } from '../firebase/config';
 import { startGpsSimulation, stopGpsSimulation } from '../utils/mockGpsSimulator';
@@ -342,48 +343,38 @@ export default function LiveTrackingScreen() {
                 setIsLoadingDetails(true);
                 const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://smartbus-tracker-z7tn.onrender.com';
                 
-                // Create abort controller for this request
-                const controller = new AbortController();
-                requestAbortController.current = controller;
-
-                const response = await fetch(`${apiUrl}/api/bus/${busId}/details`, {
-                    signal: controller.signal,
-                    // Add timeout for slow networks
-                });
+                console.log(`🔍 Fetching bus details for ${busId}...`);
+                
+                // Use fallback loader that tries API then Firebase
+                const polylineData = await loadPolylineWithFallback(busId, apiUrl);
                 
                 if (!mounted) return;
-
-                if (response.ok) {
-                    const data = await response.json();
+                
+                if (polylineData) {
+                    console.log('✅ Polyline data loaded:', {
+                        polylineLength: polylineData.polyline.length,
+                        stopsLength: polylineData.stops.length
+                    });
                     
-                    if (mounted) {
-                        if (data.route_polyline && Array.isArray(data.route_polyline)) {
-                            setPolyline(data.route_polyline);
-                        }
-                        if (data.stops && Array.isArray(data.stops)) {
-                            const validStops = data.stops.filter((stop: any) => stop.lat && stop.lng && stop.name);
-                            setStops(validStops);
-                            console.log(`✅ Loaded ${validStops.length} stops`);
-                        }
-
-                        // Cache the data for next time
-                        if (data.route_polyline && data.stops) {
-                            await BusDataCache.set(busId, data.route_polyline, data.stops);
-                        }
-                        
-                        // Mark map as ready if we loaded the polyline from API
-                        if (data.route_polyline) {
-                            setIsMapReady(true);
-                        }
+                    setPolyline(polylineData.polyline);
+                    
+                    if (polylineData.stops && Array.isArray(polylineData.stops)) {
+                        const validStops = polylineData.stops.filter((stop: any) => stop.lat && stop.lng && stop.name);
+                        setStops(validStops);
+                        console.log(`✅ Loaded ${validStops.length} stops`);
                     }
+                    
+                    // Cache the data
+                    await BusDataCache.set(busId, polylineData.polyline, polylineData.stops);
+                    console.log('💾 Cached polyline and stops');
+                    
+                    setIsMapReady(true);
                 } else {
-                    console.warn(`Failed to fetch bus details: ${response.status}`);
+                    console.error('❌ Failed to load polyline from all sources');
                 }
+                
             } catch (error: any) {
-                // Skip error logging for aborted requests
-                if (error.name !== 'AbortError') {
-                    console.warn('Failed to fetch bus details:', error?.message || error);
-                }
+                console.error('❌ Error fetching bus details:', error?.message || error);
             } finally {
                 if (mounted) {
                     setIsLoadingDetails(false);
@@ -395,9 +386,6 @@ export default function LiveTrackingScreen() {
 
         return () => {
             mounted = false;
-            if (requestAbortController.current) {
-                requestAbortController.current.abort();
-            }
         };
     }, [busId]);
 

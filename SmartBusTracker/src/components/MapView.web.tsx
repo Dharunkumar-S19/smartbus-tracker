@@ -71,7 +71,7 @@ export default function MapViewWeb({ latitude, longitude, polyline, stops }: Map
                         position={{ lat: stop.lat, lng: stop.lng }}
                         title={stop.name}
                         icon={{
-                            path: google.maps.SymbolPath.CIRCLE,
+                            path: (google.maps as any).SymbolPath.CIRCLE,
                             fillColor: '#F59E0B',
                             fillOpacity: 1,
                             strokeColor: '#ffffff',
@@ -89,8 +89,8 @@ export default function MapViewWeb({ latitude, longitude, polyline, stops }: Map
                 
                 <MarkerF
                     position={center}
-                    icon={isLoaded && window.google ? {
-                        path: google.maps.SymbolPath.CIRCLE,
+                    icon={isLoaded ? {
+                        path: (google.maps as any).SymbolPath.CIRCLE,
                         fillColor: '#2563EB',
                         fillOpacity: 1,
                         strokeColor: '#ffffff',
@@ -106,6 +106,7 @@ export default function MapViewWeb({ latitude, longitude, polyline, stops }: Map
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        ...StyleSheet.absoluteFillObject,
+        width: '100%',
+        height: '100%',
     },
 });

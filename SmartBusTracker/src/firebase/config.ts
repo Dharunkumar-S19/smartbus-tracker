@@ -1,9 +1,10 @@
 import { FirebaseApp, initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeAuth, getReactNativePersistence, getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { getDatabase } from 'firebase/database';
 import { getMessaging, isSupported } from 'firebase/messaging';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Firebase configuration using environment variables from .env
 const firebaseConfig = {
@@ -16,27 +17,60 @@ const firebaseConfig = {
     databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL,
 };
 
+console.log('🔧 Initializing Firebase...');
+
 // Initialize Firebase only once
 let app: FirebaseApp;
-if (getApps().length === 0) {
-    app = initializeApp(firebaseConfig);
-} else {
-    app = getApp();
+try {
+    if (getApps().length === 0) {
+        app = initializeApp(firebaseConfig);
+        console.log('✅ Firebase app initialized');
+    } else {
+        app = getApp();
+        console.log('✅ Firebase app already exists');
+    }
+} catch (error) {
+    console.error('❌ Firebase initialization error:', error);
+    throw error;
 }
 
-// Initialize Auth, Firestore, and Realtime Database
-const auth = getAuth(app);
+// Initialize Auth with AsyncStorage persistence for React Native
+let auth;
+try {
+    if (Platform.OS === 'web') {
+        auth = getAuth(app);
+        console.log('✅ Firebase Auth initialized (web)');
+    } else {
+        auth = initializeAuth(app, {
+            persistence: getReactNativePersistence(AsyncStorage)
+        });
+        console.log('✅ Firebase Auth initialized with AsyncStorage (native)');
+    }
+} catch (error: any) {
+    if (error.code === 'auth/already-initialized') {
+        auth = getAuth(app);
+        console.log('✅ Firebase Auth already initialized');
+    } else {
+        console.error('❌ Firebase Auth error:', error);
+        throw error;
+    }
+}
+
+// Initialize Firestore and Realtime Database
 const db = getFirestore(app);
 const rtdb = getDatabase(app);
+console.log('✅ Firestore and RTDB initialized');
 
 // Initialize Messaging (Firebase Cloud Messaging) specifically for web 
-// (React Native mobile handles push via expo-notifications natively)
 let messaging = null;
 if (Platform.OS === 'web') {
     isSupported().then((supported) => {
         if (supported) {
             messaging = getMessaging(app);
+            console.log('✅ Firebase Messaging initialized');
         }
+    }).catch((error) => {
+        console.warn('⚠️ Firebase Messaging not supported:', error);
     });
 }
 
@@ -57,15 +91,15 @@ export async function saveFCMToken(uid: string, token: string) {
                 fcm_tokens: arrayUnion(token)
             });
         } else {
-            // Create user document if it doesn't exist
             await setDoc(userRef, {
                 uid: uid,
                 fcm_tokens: [token],
                 created_at: new Date()
             });
         }
+        console.log('✅ FCM token saved');
     } catch (error) {
-        console.error('Error saving FCM token:', error);
+        console.error('❌ Error saving FCM token:', error);
     }
 }
 
@@ -86,15 +120,15 @@ export async function addTrackedBus(uid: string, busId: string) {
                 tracked_buses: arrayUnion(busId)
             });
         } else {
-            // Create user doc if somehow missing
             await setDoc(userRef, {
                 uid: uid,
                 tracked_buses: [busId],
                 created_at: new Date()
             });
         }
+        console.log('✅ Bus tracked');
     } catch (error) {
-        console.error('Error tracking bus:', error);
+        console.error('❌ Error tracking bus:', error);
     }
 }
 

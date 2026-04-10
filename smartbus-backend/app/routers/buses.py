@@ -4,7 +4,9 @@ from app.models.bus import BusInfo
 from app.models.route import StopInfo
 from app.models.location import SmoothedLocation
 from app.services.firebase_service import get_all_buses, get_bus_route, get_firestore_client
+from app.utils.fuzzy_matching import validate_and_suggest
 from firebase_admin import db
+import firebase_admin
 
 router = APIRouter()
 
@@ -16,15 +18,59 @@ async def get_buses(
     buses = await get_all_buses()
     
     if from_location and to_location:
-        from_loc_lower = from_location.lower().strip()
-        to_loc_lower = to_location.lower().strip()
+        # Validate and auto-correct stop names
+        validation = validate_and_suggest(from_location, to_location)
+        
+        if not validation["valid"]:
+            # Return error with suggestions
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "Stops not found",
+                    "message": validation["message"],
+                    "from_suggestions": validation["from_suggestions"],
+                    "to_suggestions": validation["to_suggestions"],
+                    "searched_from": from_location,
+                    "searched_to": to_location
+                }
+            )
+        
+        # Use corrected names
+        from_loc_lower = validation["from_corrected"].lower().strip()
+        to_loc_lower = validation["to_corrected"].lower().strip()
+        
+        # Log if corrections were made
+        if validation["from_corrected"] != from_location or validation["to_corrected"] != to_location:
+            print(f"Auto-corrected: {from_location} -> {validation['from_corrected']}, {to_location} -> {validation['to_corrected']}")
         
         filtered_buses = []
         for bus in buses:
-            # Exact matching filter as requested ignoring case
-            if bus.from_location.lower().strip() == from_loc_lower and bus.to_location.lower().strip() == to_loc_lower:
+            # Check if it's an exact match first (faster)
+            if (bus.from_location.lower().strip() == from_loc_lower and 
+                bus.to_location.lower().strip() == to_loc_lower):
                 filtered_buses.append(bus)
+            else:
+                # Check if both locations are in the bus route (intermediate stops)
+                if hasattr(bus, 'stops') and bus.stops:
+                    stop_names = [stop.get('name', '').lower().strip() for stop in bus.stops]
+                    
+                    # Find indices of from and to locations in stops
+                    from_index = -1
+                    to_index = -1
+                    
+                    for idx, stop_name in enumerate(stop_names):
+                        if stop_name == from_loc_lower:
+                            from_index = idx
+                        if stop_name == to_loc_lower:
+                            to_index = idx
+                    
+                    # If both stops found and from comes before to, include this bus
+                    if from_index != -1 and to_index != -1 and from_index < to_index:
+                        filtered_buses.append(bus)
+                        print(f"Bus {bus.bus_id} matches intermediate route: {validation['from_corrected']} (stop {from_index+1}) -> {validation['to_corrected']} (stop {to_index+1})")
+        
         buses = filtered_buses
+        print(f"Found {len(buses)} buses matching {validation['from_corrected']} -> {validation['to_corrected']}")
         
     # Enrich with latest location if available
     if firebase_admin._apps:
